@@ -38,6 +38,9 @@ stage curate         python -m sandesh.curate --only train train_clean dev
 # --- baselines first: real numbers within ~30 min -----------------------
 stage eval_base            python -m sandesh.evaluate --model "$BASE" --name base --bs "$BS_GEN"
 stage eval_base_defensive  python -m sandesh.evaluate --model "$BASE" --name base_defensive --prompt defensive --bs "$BS_GEN"
+# early look: paste results/summary.md to Claude now; if "Re-reads inbox" is high or attack success is ~0,
+# the prompt format needs fixing before spending GPU hours on training
+FORCE=1 stage score_baselines python -m sandesh.score --no-auditkit
 
 # --- SafeGrad's alignment anchor: the base model's own refusals ----------
 stage safety_anchor  python -m sandesh.safety anchor --model "$BASE" --judge "$JUDGE" --bs "$BS_GEN"

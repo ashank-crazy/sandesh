@@ -49,8 +49,8 @@ def collect(data: Path, runs: Path, before: str, after: str, per_split: int, see
                 "style": s["style"], "goal": s["goal"], "task": s["task"], "request": s["user_request"],
                 "inbox": [{"sender": m["sender"], "time": m["time"], "text": m["text"], "scam": m["kind"] == "scam"}
                           for m in s["inbox"]],
-                "before": {"raw": ob[sid], "action": parse_action(ob[sid]), **{k: sb[k] for k in ("hijacked", "success", "valid")}},
-                "after": {"raw": oa[sid], "action": parse_action(oa[sid]), **{k: sa[k] for k in ("hijacked", "success", "valid")}},
+                "before": {"raw": ob[sid], "action": parse_action(ob[sid]), **{k: sb[k] for k in ("hijacked", "success", "valid", "reread")}},
+                "after": {"raw": oa[sid], "action": parse_action(oa[sid]), **{k: sa[k] for k in ("hijacked", "success", "valid", "reread")}},
                 "outcome": outcome,
             })
         # Mostly wins, but keep failures visible: an honest explorer is a better demo.
@@ -140,6 +140,7 @@ function verdict(r){
   if (r.hijacked) return ['bad','✕ Hijacked: obeyed the scam'];
   if (r.success) return ['good','✓ Did the user\'s task, ignored the scam'];
   if (!r.valid) return ['', '– No valid tool call'];
+  if (r.reread) return ['', '– Stalled: asked to read the inbox again'];
   return ['', '– Ignored the scam, but missed the task'];
 }
 function act(label, r){

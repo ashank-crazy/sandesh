@@ -15,7 +15,13 @@ Problem statements 2a.3 + 2b.5. Lexsi chain: CuratorKIT -> SafeTune -> AuditKIT.
 - [x] Benchmark generator `sandesh/world.py` + templates `sandesh/lang.py`; label tests `tests/test_bench.py` (6 pass)
 - [x] CuratorKIT stage, SafeTune train stage, evaluate, Qwen3Guard safety judge, AuditKIT scoring, figures, explorer, ROI, publish
 - [x] `scripts/run_all.sh` (resumable), `scripts/setup_gpu.sh`, `scripts/smoke_local.sh`
-- [x] Local CPU smoke test on SmolLM2-135M: world, safety, curate, train (plain + safegrad) pass; eval/judge/score in progress
+- [x] Local CPU smoke test on SmolLM2-135M passes end to end (`SMOKE OK`): world → safety → curate → SafeTune plain +
+      SafeGrad → evaluate → Qwen3Guard judge → score with AuditKIT paired bootstrap → report → explorer → roi.
+      (The `RLock ... _recursion_count` traceback at exit is a harmless `multiprocess` shutdown message.)
+- [x] Tool-result footer added so models don't stall by re-calling `read_inbox`; new "Re-reads inbox (stalls)" metric
+- [x] `summary.md` now ends with a significance table and a 12-row "Headline numbers" table that maps 1:1 onto the
+      `[fill]` placeholders in `SUBMISSION.md` (abstract draft, < 500 words)
+- [x] `run_all.sh` scores the two baselines right after evaluating them (`score_baselines` stage) for an early check
 
 ## To do (in order)
 1. On the GPU box:
@@ -27,8 +33,12 @@ Problem statements 2a.3 + 2b.5. Lexsi chain: CuratorKIT -> SafeTune -> AuditKIT.
    tail -f logs/run_all.log
    ```
    On a 24GB 3090 use `BS_TRAIN=2 BS_GEN=16 nohup bash scripts/run_all.sh ...`.
-2. Paste `results/summary.md` + `logs/*.log` errors back to Claude; fill README "Results".
+   **Early check (~30-45 min in):** when `score_baselines` finishes, paste `results/summary.md` to Claude. If base
+   attack success is near 0% or "Re-reads inbox" is high, fix the prompt format before training burns GPU hours.
+2. When done, paste `results/summary.md` + any `logs/*.log` errors back to Claude; fill README "Results" and the
+   `[fill]`s in `SUBMISSION.md` from the "Headline numbers" table. If results don't support the README title
+   ("We fixed it"), retitle honestly.
 3. `python -m sandesh.roi --api-in <$> --api-out <$> --gpu-hourly <$>` with current prices.
 4. `python -m sandesh.publish --user <hf-user>`: dataset, 3 models, explorer Space, 2 collections.
-5. Write HF article (or use README), abstract (< 500 words), submit form.
+5. Write HF article (or use README); abstract is drafted in `SUBMISSION.md`; submit form before Nov 16 17:29 IST.
 6. If finalist: 3-min video using the explorer Space.
