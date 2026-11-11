@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# large / regenerable artifacts (published to Hugging Face instead)
+ckpt/
+data/
+runs/
+logs/
+.done/
+results/auditkit/
+results/scored_*.jsonl
+*.safetensors
+.DS_Store

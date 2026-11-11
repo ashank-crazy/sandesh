@@ -1,0 +1,14 @@
+torch>=2.7
+transformers>=5.15,<6
+peft>=0.18
+trl>=0.12,<1.15
+accelerate>=1.6
+datasets>=2.14
+huggingface_hub>=0.34
+safetune>=0.1.16
+auditkit[transformers]>=1.1.10
+curatorkit[connectors]>=0.1.25
+datasketch>=1.6
+matplotlib>=3.7
+pandas>=2.0
+pytest>=8
