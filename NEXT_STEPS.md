@@ -44,8 +44,9 @@ CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `
    tail -f logs/run_all.log
    ```
    On a 24GB 3090: `BS_TRAIN=2 BS_GEN=16 BS_MT=8 nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &`.
-   **Already running an older clone?** Let it run. When it finishes (or any time), `git pull` and start the same
-   command again: finished stages are skipped (`.done/`), new stages run. `git pull` mid-run is safe.
+   **Already running an older clone?** Let it run; `git pull` is safe mid-run. Once that run has finished, start the
+   same command again: finished stages are skipped (`.done/`), new stages run. `run_all.sh` refuses to start while
+   another copy is running (it would fight the first for GPU memory); `NO_LOCK=1` overrides that.
    **Early check (~30-45 min in):** when `score_baselines` finishes, paste `results/summary.md` to Claude. If base
    attack success is near 0% or "Re-reads inbox" is high, fix the prompt format before training burns GPU hours.
    "CORE RESULTS READY" in the log means the main table exists; the add-ons follow (several more hours).

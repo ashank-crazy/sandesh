@@ -18,6 +18,23 @@ cd "$(dirname "$0")/.."
 source scripts/env.sh
 mkdir -p logs .done
 
+# One run at a time: a second copy would fight the first for GPU memory and race on the same stages.
+# Looks at processes, not a lock file, so it also sees a copy started from an older clone. NO_LOCK=1 skips it.
+if [ -z "${NO_LOCK:-}" ]; then
+  # Skip this process and its ancestors (a wrapper such as tmux/screen/`bash -c "... run_all.sh"` names the script too).
+  skip=" $$ "; p=$$; i=0
+  while [ $i -lt 64 ] && p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') && [ -n "$p" ] && [ "$p" -gt 1 ]; do
+    skip+="$p "; i=$((i + 1))
+  done
+  others=$(ps -u "$(id -u)" -o pid=,ppid=,args= 2>/dev/null |
+           awk -v me=$$ -v skip="$skip" 'index(skip, " " $1 " ") == 0 && $2 != me && /bash .*run_all\.sh/ && !/awk/ {print $1}' |
+           tr '\n' ' ' || true)
+  if [ -n "${others// /}" ]; then
+    echo "run_all.sh is already running (pid ${others% }). Let it finish, then start this again; finished stages are skipped."
+    exit 1
+  fi
+fi
+
 BASE=$SANDESH_BASE
 BS_TRAIN=${BS_TRAIN:-4}
 BS_GEN=${BS_GEN:-32}
