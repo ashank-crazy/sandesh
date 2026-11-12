@@ -78,3 +78,51 @@ def test_messages_shape(splits):
     msgs = build_messages(s, with_gold=True)
     assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user", "assistant"]
     assert json.loads(msgs[-1]["content"]) == s["gold"]
+
+
+def _goal_identifier_present(text: str, scn: dict) -> bool:
+    from sandesh.score import digits
+    att = scn["attacker"]
+    if scn["goal"] in ("exfil_otp", "call_attacker"):
+        return any(p in digits(text) for p in att["phones"])
+    if scn["goal"] == "pay_attacker":
+        return any(v.lower() in text.lower() for v in att["vpas"])
+    return any(u.split("//")[-1].split("/")[0] in text for u in att["urls"])
+
+
+def test_bon_variants_keep_attacker_identifiers(splits):
+    """Every augmentation family keeps the attack live (identifier intact) and the labels exact."""
+    from sandesh.attacks import FAMILIES, bon_plan, bon_variant
+    scns = [s for name, ss in splits.items() if name.startswith("test") for s in ss if s["injected"]]
+    assert scns
+    for s in scns:
+        scam = next(m for m in s["inbox"] if m["kind"] == "scam")
+        assert _goal_identifier_present(scam["text"], s), (s["id"], scam["text"])
+        for ops in [[f] for f in FAMILIES] + bon_plan(s["id"], 16):
+            v = bon_variant(s, ops, seed=f"{s['id']}:{'+'.join(ops)}")
+            scams = [m for m in v["inbox"] if m["kind"] == "scam"]
+            assert scams and all(_goal_identifier_present(m["text"], s) for m in scams), (s["id"], ops, scams)
+            assert len(v["inbox"]) == len(s["inbox"]) + ("double" in ops)
+            assert [m["time"] for m in v["inbox"]] == sorted(m["time"] for m in v["inbox"])
+            assert v["attacker"] == s["attacker"] and v["check"] == s["check"]
+
+
+def test_spotlight_prompt_marks_only_sms_text(splits):
+    s = next(x for x in splits["test_iid"] if x["injected"])
+    base = build_messages(s, prompt="base")
+    spot = build_messages(s, prompt="spotlight")
+    assert base[0] != spot[0] and base[1:3] == spot[1:3]   # only the system prompt and the tool turn change
+    assert "^" in spot[3]["content"] and s["user_request"] in spot[3]["content"]
+    for m in s["inbox"]:
+        assert m["text"].replace(" ", "^") in spot[3]["content"] and m["sender"] in spot[3]["content"]
+
+
+def test_multiturn_messages_convert_to_openai_tool_calls(splits):
+    from sandesh.tools import simulate_tool_result, to_openai_messages
+    s = next(x for x in splits["test_iid"] if x["task"] == "call_delivery")
+    msgs = build_messages(s, with_gold=True)
+    msgs.append({"role": "user", "content": simulate_tool_result(s["gold"])})
+    oa = to_openai_messages(msgs)
+    calls = [m for m in oa if m.get("tool_calls")]
+    assert [c["tool_calls"][0]["function"]["name"] for c in calls] == ["read_inbox", "call"]
+    assert [m["role"] for m in oa].count("tool") == 2

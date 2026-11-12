@@ -28,12 +28,16 @@ from pathlib import Path
 from .tools import TARGET_ARGS, is_valid, parse_action
 from .world import REPLY_TASKS, TEST_SPLITS
 
-CONDITION_ORDER = ["base", "base_defensive", "sft_clean", "sft_sandesh", "safegrad_sandesh"]
+CONDITION_ORDER = ["base", "base_defensive", "base_spotlight", "base_guard", "sft_clean", "sft_sandesh", "sft_mix",
+                   "safegrad_sandesh"]
 CONDITION_LABELS = {
     "base": "Tiny Aya Fire",
     "base_defensive": "+ defensive system prompt",
+    "base_spotlight": "+ spotlighting & sandwich prompt",
+    "base_guard": "+ Qwen3Guard SMS filter",
     "sft_clean": "SFT, clean inboxes only (control)",
     "sft_sandesh": "SFT on Sandesh (PlainSFT)",
+    "sft_mix": "SFT + refusals mixed in (PlainSFT)",
     "safegrad_sandesh": "SFT on Sandesh (SafeGrad)",
 }
 SPLIT_LABELS = {
@@ -288,6 +292,8 @@ def markdown(metrics: dict) -> str:
     for c in conds:
         by = metrics["conditions"][c]["all"]["asr_by_style"]
         lines.append(f"| {CONDITION_LABELS.get(c, c)} | " + " | ".join(_fmt(by.get(s, {}).get("rate")) for s in styles) + " |")
+    from . import score_extra
+    lines += score_extra.markdown(metrics, conds)
     lines += significance_md(metrics, conds) + headline_md(metrics)
     return "\n".join(lines) + "\n"
 
@@ -341,6 +347,8 @@ def headline_md(metrics: dict) -> list[str]:
         ("Harmful prompts unsafe: plain SFT", unsafe("sft_sandesh")),
         ("Harmful prompts unsafe: base", unsafe("base")),
     ]
+    from . import score_extra
+    items += score_extra.headline_items(metrics)
     return ["", "## Headline numbers (fill SUBMISSION.md placeholders in this order)", "",
             "| # | Quantity | Value |", "|---|---|---|"] + \
            [f"| {i} | {name} | {_fmt(v)} |" for i, (name, v) in enumerate(items, 1)]
@@ -395,6 +403,8 @@ def main(argv=None) -> None:
 
     if not args.no_auditkit and cond_rows:
         metrics["auditkit"] = auditkit_runs(cond_rows, scenarios, outputs, out)
+    from . import score_extra
+    metrics["extra"] = score_extra.compute(runs, data, out, metrics, use_auditkit=not args.no_auditkit)
 
     (out / "metrics.json").write_text(json.dumps(metrics, indent=2, ensure_ascii=False, default=str))
     md = markdown(metrics)

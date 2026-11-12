@@ -30,9 +30,26 @@ def _style(ax):
     ax.set_axisbelow(True)
 
 
-def _color(c: str, i: int) -> str:
-    """Colour follows the condition, never its position in this particular chart."""
-    return COLORS[CONDITION_ORDER.index(c) % len(COLORS)] if c in CONDITION_ORDER else COLORS[i % len(COLORS)]
+# Five charted slots, one fixed colour each (colour follows the condition in every figure).
+# Slot 2 shows the strongest prompt defense that was run. Everything else is table-only.
+SLOTS = [["base"], ["base_spotlight", "base_defensive"], ["base_guard"], ["sft_sandesh"], ["safegrad_sandesh"]]
+
+
+def chart_conds(available) -> list[str]:
+    avail = set(available)
+    picked = []
+    for slot in SLOTS:
+        c = next((c for c in slot if c in avail), None)
+        if c:
+            picked.append(c)
+    return picked
+
+
+def _color(c: str, i: int = 0) -> str:
+    for j, slot in enumerate(SLOTS):
+        if c in slot:
+            return COLORS[j]
+    return COLORS[i % len(COLORS)]
 
 
 def _pct(x):
@@ -125,6 +142,76 @@ def fig_tradeoff(m: dict, conds: list[str], out: Path):
     plt.close(fig)
 
 
+def _line_chart(series: dict, xs: list, out: Path, title: str, xlabel: str, ylabel: str, logx: bool = False,
+                xticks: list | None = None):
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 4.6), dpi=200, facecolor=SURFACE)
+    _style(ax)
+    for c, ys in series.items():
+        ax.plot(xs[:len(ys)], [100 * y for y in ys], color=_color(c), linewidth=2, marker="o", markersize=5,
+                markeredgecolor=SURFACE, markeredgewidth=1.5, label=CONDITION_LABELS.get(c, c), zorder=3)
+        ax.text(xs[len(ys) - 1], 100 * ys[-1], f"  {100 * ys[-1]:.0f}%", va="center", fontsize=8, color=INK)
+    if logx:
+        ax.set_xscale("log", base=2)
+    if xticks:
+        ax.set_xticks(xticks, [str(x) for x in xticks])
+    ax.set_ylim(0, 100)
+    ax.set_xlabel(xlabel, color=INK2)
+    ax.set_ylabel(ylabel, color=INK2)
+    ax.set_title(title, loc="left", color=INK, fontsize=13)
+    ax.legend(frameon=False, fontsize=8, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.16), labelcolor=INK)
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
+def fig_bon(m: dict, out: Path):
+    bon = (m.get("extra") or {}).get("bon") or {}
+    conds = chart_conds(bon)
+    if not conds:
+        return
+    K = max(bon[c]["K"] for c in conds)
+    _line_chart({c: bon[c]["curve"] for c in conds}, list(range(1, K + 1)), out,
+                "Attack success when the scammer gets k tries", "attempts per scenario (k)",
+                "attack success rate (%)  ↓ better", logx=True, xticks=[k for k in (1, 2, 4, 8, 16, 32) if k <= K])
+
+
+def fig_multiturn(m: dict, out: Path):
+    mt = (m.get("extra") or {}).get("multiturn") or {}
+    conds = chart_conds(mt)
+    if not conds:
+        return
+    series = {c: [(mt[c]["compromised_by_turn"].get(str(t)) or mt[c]["compromised_by_turn"].get(t) or {}).get("rate") or 0
+                  for t in (1, 2, 3)] for c in conds}
+    _line_chart(series, [1, 2, 3], out, "Hijacked by turn: the scammer follows up, the user delegates",
+                "user turn", "episodes hijacked so far (%)  ↓ better", xticks=[1, 2, 3])
+
+
+def fig_detectors(m: dict, out: Path):
+    import matplotlib.pyplot as plt
+
+    det = (m.get("extra") or {}).get("detectors") or {}
+    if not det:
+        return
+    langs = [l for l in LANG_ORDER if any(l in v["recall_by_lang"] for v in det.values())]
+    fig, ax = plt.subplots(figsize=(9, 4.4), dpi=200, facecolor=SURFACE)
+    _style(ax)
+    n, w = len(det), 0.8 / len(det)
+    for i, (name, v) in enumerate(det.items()):
+        xs = [j + (i - (n - 1) / 2) * w for j in range(len(langs))]
+        ys = [100 * (v["recall_by_lang"].get(l, {}).get("rate") or 0) for l in langs]
+        ax.bar(xs, ys, w * 0.92, color=COLORS[i % len(COLORS)], edgecolor=SURFACE, linewidth=1.5, label=name)
+    ax.set_xticks(range(len(langs)), [LANG_LABELS[l] for l in langs], color=INK)
+    ax.set_ylim(0, 100)
+    ax.set_ylabel("scam SMS flagged (%)  ↑ better", color=INK2)
+    ax.set_title("Do off-the-shelf detectors catch Indian scam SMS?", loc="left", color=INK, fontsize=13)
+    ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.12), labelcolor=INK)
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--results", default="results")
@@ -136,9 +223,13 @@ def main(argv=None) -> None:
     m = json.loads((res / "metrics.json").read_text())
     conds = [c for c in CONDITION_ORDER if c in m["conditions"]] + \
             [c for c in m["conditions"] if c not in CONDITION_ORDER]
-    fig_asr_by_split(m, conds, res / "fig_asr_by_split.png")
+    charted = chart_conds(conds)
+    fig_asr_by_split(m, charted, res / "fig_asr_by_split.png")
     fig_lang_dumbbell(m, res / "fig_asr_by_language.png")
-    fig_tradeoff(m, conds, res / "fig_tradeoff.png")
+    fig_tradeoff(m, charted, res / "fig_tradeoff.png")
+    fig_bon(m, res / "fig_bon_curve.png")
+    fig_multiturn(m, res / "fig_multiturn.png")
+    fig_detectors(m, res / "fig_detectors.png")
     print(f"figures -> {res}")
 
 
