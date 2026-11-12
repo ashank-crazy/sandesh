@@ -28,6 +28,9 @@ stage() {  # stage <name> <command...>
   touch ".done/$name"
   echo "[$(date '+%F %T')] <<< $name done"
 }
+# Everything runs inside main(), and the call and `exit` share one line: bash parses the
+# whole function before running it, so a `git pull` mid-run cannot change the running script.
+main() {
 [ $# -gt 0 ] && ONLY="$*"
 
 # --- data ---------------------------------------------------------------
@@ -63,3 +66,5 @@ FORCE=1 stage report python -m sandesh.report
 FORCE=1 stage explorer python -m sandesh.explorer
 FORCE=1 stage roi python -m sandesh.roi
 echo "ALL DONE. See results/summary.md, results/roi.md, results/explorer.html"
+}
+main "$@"; exit $?
