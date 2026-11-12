@@ -202,13 +202,111 @@ def fig_detectors(m: dict, out: Path):
         xs = [j + (i - (n - 1) / 2) * w for j in range(len(langs))]
         ys = [100 * (v["recall_by_lang"].get(l, {}).get("rate") or 0) for l in langs]
         ax.bar(xs, ys, w * 0.92, color=COLORS[i % len(COLORS)], edgecolor=SURFACE, linewidth=1.5, label=name)
+        for x, y in zip(xs, ys):
+            ax.text(x, y + 1.5, f"{y:.0f}", ha="center", va="bottom", fontsize=7, color=INK2)
     ax.set_xticks(range(len(langs)), [LANG_LABELS[l] for l in langs], color=INK)
-    ax.set_ylim(0, 100)
+    ax.set_ylim(0, 108)
+    ax.set_yticks(range(0, 101, 20))
     ax.set_ylabel("scam SMS flagged (%)  ↑ better", color=INK2)
     ax.set_title("Do off-the-shelf detectors catch Indian scam SMS?", loc="left", color=INK, fontsize=13)
     ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.12), labelcolor=INK)
     fig.tight_layout()
     fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
+# Diverging map for signed attributions: blue (works against the hijack) <- gray -> red (carries it).
+DIVERGING = ["#184f95", "#86b6ef", "#f0efec", "#f2a3a2", "#b8302f"]
+
+
+def fig_circuit(m: dict, out: Path):
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+
+    ck = (m.get("extra") or {}).get("circuit") or {}
+    panels = [(n, ck[n]) for n in ("base", "safegrad_sandesh") if (ck.get(n) or {}).get("head_grid")]
+    if not panels:
+        return
+    # Robust colour limit: one extreme head (often a negative one in the last layer) would otherwise wash out
+    # every other cell. Values beyond the 99th percentile of |score| saturate; the colorbar arrows say so.
+    mags = sorted(abs(v) for _, d in panels for row in d["head_grid"] for v in row)
+    vmax = mags[int(0.99 * (len(mags) - 1))] if mags else 1.0
+    vmax = vmax or (mags[-1] if mags else 0) or 1.0
+    cmap = LinearSegmentedColormap.from_list("div", DIVERGING)
+    L, H = len(panels[0][1]["head_grid"]), len(panels[0][1]["head_grid"][0])
+    fig, axes = plt.subplots(1, len(panels), figsize=(3.2 + 2.6 * len(panels), 0.16 * L + 2.0), dpi=200,
+                             facecolor=SURFACE, squeeze=False)
+    for ax, (name, d) in zip(axes[0], panels):
+        im = ax.imshow(d["head_grid"], cmap=cmap, norm=TwoSlopeNorm(0, -vmax, vmax), aspect="auto",
+                       interpolation="nearest")
+        for k, _ in d.get("top_heads", [])[:5]:
+            l, h = map(int, k[1:].split("."))
+            ax.add_patch(plt.Rectangle((h - 0.5, l - 0.5), 1, 1, fill=False, edgecolor=INK, linewidth=1.2))
+        ax.set_title(CONDITION_LABELS.get(name, name), loc="left", color=INK, fontsize=10)
+        ax.set_xlabel("attention head", color=INK2, fontsize=9)
+        ax.set_xticks(range(0, H, max(1, H // 8)))
+        ax.set_yticks(range(0, L, max(1, L // 9)))
+        ax.tick_params(colors=INK2, length=0, labelsize=8)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+    axes[0][0].set_ylabel("layer", color=INK2, fontsize=9)
+    cb = fig.colorbar(im, ax=axes[0].tolist(), fraction=0.04, pad=0.03, extend="both")
+    cb.set_label("EAP-IG score  (red: carries the scam's push to the attacker's tool)", color=INK2, fontsize=8)
+    cb.ax.tick_params(colors=INK2, labelsize=7, length=0)
+    cb.outline.set_visible(False)
+    fig.suptitle("Where the hijack happens: CircuitKIT attribution per attention head (top 5 boxed)",
+                 x=0.02, ha="left", color=INK, fontsize=12)
+    fig.savefig(out, facecolor=SURFACE, bbox_inches="tight")
+    plt.close(fig)
+
+
+def fig_knockout(m: dict, out: Path):
+    import matplotlib.pyplot as plt
+
+    sw = (((m.get("extra") or {}).get("circuit") or {}).get("base") or {}).get("sweep") or {}
+    if not sw.get("top"):
+        return
+    ks = sorted(sw["top"], key=int)
+    xs = list(range(len(ks) + 1))
+    labels = ["0"] + ks
+    panels = [("attack_beats_task", "Scam present: attacker's tool ranked first (%)  ↓ better"),
+              ("task_beats_attack_no_scam", "No scam: task's tool ranked first (%)  ↑ better")]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), dpi=200, facecolor=SURFACE)
+    for ax, (key, title) in zip(axes, panels):
+        _style(ax)
+        b = (sw["baseline"].get("test") or {}).get(key)
+        top = [b] + [(sw["top"][k].get("test") or {}).get(key) for k in ks]
+        rnd = [b] + [((sw["random"].get(k) or {}).get("test") or {}).get(key) for k in ks]
+        for ys, color, lab in ((top, COLORS[0], "top-k CircuitKIT heads zeroed"),
+                               (rnd, "#8c8b85", "k random heads zeroed (control)")):
+            ax.plot(xs, [100 * (y or 0) for y in ys], color=color, linewidth=2, marker="o", markersize=5,
+                    markeredgecolor=SURFACE, markeredgewidth=1.5, label=lab, zorder=3)
+        # End labels: one label when both lines end on the same value, pushed apart when they nearly collide.
+        e_top, e_rnd = 100 * (top[-1] or 0), 100 * (rnd[-1] or 0)
+        if round(e_top) == round(e_rnd):
+            ends = [(e_top, e_top)]
+        else:
+            gap = max(0.0, 7 - abs(e_top - e_rnd)) / 2
+            hi, lo = (e_top, e_rnd) if e_top > e_rnd else (e_rnd, e_top)
+            ends = [(hi, hi + gap), (lo, lo - gap)]
+        for val, y in ends:
+            ax.text(xs[-1], y, f"  {val:.0f}%", va="center", fontsize=8, color=INK)
+        if sw.get("chosen_k") is not None and str(sw["chosen_k"]) in ks:
+            xk = ks.index(str(sw["chosen_k"])) + 1
+            ax.axvline(xk, color=INK2, linewidth=0.8, linestyle=":")
+            ax.text(xk - 0.1, 103, f"chosen k={sw['chosen_k']}", ha="right", fontsize=8, color=INK2)
+        ax.set_xticks(xs, labels)
+        ax.set_ylim(0, 108)
+        ax.set_yticks(range(0, 101, 20))
+        ax.set_xlabel("attention heads zeroed (k)", color=INK2)
+        ax.set_title(title, loc="left", color=INK, fontsize=10)
+    handles, labs = axes[0].get_legend_handles_labels()
+    fig.suptitle("Knocking out the injection heads (held-out test pairs, base model, no training)",
+                 x=0.02, ha="left", color=INK, fontsize=12)
+    fig.tight_layout(rect=(0, 0.07, 1, 1), w_pad=3)
+    fig.legend(handles, labs, frameon=False, fontsize=8, loc="lower center", bbox_to_anchor=(0.5, 0.0), ncol=2,
+               labelcolor=INK)
+    fig.savefig(out, facecolor=SURFACE, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -230,6 +328,8 @@ def main(argv=None) -> None:
     fig_bon(m, res / "fig_bon_curve.png")
     fig_multiturn(m, res / "fig_multiturn.png")
     fig_detectors(m, res / "fig_detectors.png")
+    fig_circuit(m, res / "fig_circuit_heads.png")
+    fig_knockout(m, res / "fig_knockout.png")
     print(f"figures -> {res}")
 
 

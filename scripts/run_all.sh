@@ -7,12 +7,12 @@
 #
 # Order: core results first (baselines, the three fine-tunes, scoring), then the add-on
 # audits (stronger baselines, best-of-N attack, multi-turn, detectors, over-refusal,
-# capability, mixing ablation). Core stages stop the run on failure; add-on stages are
+# capability, mixing ablation, CircuitKIT circuit + head knockout). Core stages stop the run on failure; add-on stages are
 # optional: a failure is logged and the run continues.
 #
 # Knobs (env): SANDESH_BASE (default CohereLabs/tiny-aya-fire), BS_TRAIN (4; use 2 on a 24GB 3090),
 #              BS_GEN (32; 16 on a 3090), BS_MT (16; 8 on a 3090), EPOCHS (2), JUDGE (Qwen/Qwen3Guard-Gen-4B),
-#              BON_PER_LANG (30), BON_K (16), MT_PER_LANG (40), MMLU_N (200)
+#              BON_PER_LANG (30), BON_K (16), MT_PER_LANG (40), MMLU_N (200), CK_N (64 CircuitKIT discovery pairs)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/env.sh
@@ -28,6 +28,7 @@ BON_PER_LANG=${BON_PER_LANG:-30}
 BON_K=${BON_K:-16}
 MT_PER_LANG=${MT_PER_LANG:-40}
 MMLU_N=${MMLU_N:-200}
+CK_N=${CK_N:-64}
 
 stage() {  # stage <name> <command...>: core stage, a failure stops the run
   local name=$1; shift
@@ -89,12 +90,34 @@ opt eval_base_spotlight python -m sandesh.evaluate --model "$BASE" --name base_s
 opt guard_detect        python -m sandesh.guard --qwen "$JUDGE" --bs "$BS_GEN"
 opt eval_base_guard     python -m sandesh.evaluate --model "$BASE" --name base_guard --inbox-filter data/guard/filter_qwen3guard.jsonl --no-harmful --no-benign --bs "$BS_GEN"
 
-# --- add-on 2: is SafeGrad better than just mixing the refusals in? ----------------
+# --- add-on 2: CircuitKIT. Where in the network does the scam take over the action, and
+#     does zeroing those attention heads (no training) stop it? Random heads as the control.
+opt ck_env   bash scripts/setup_ck.sh
+opt ck_pairs python -m sandesh.circuit pairs --model "$BASE"
+if [ -x .venv-ck/bin/python ]; then
+  opt ck_discover_base .venv-ck/bin/python -m sandesh.circuit discover --model "$BASE" --name base --n "$CK_N"
+  if [ -e ckpt/safegrad_sandesh ]; then
+    opt ck_discover_safegrad .venv-ck/bin/python -m sandesh.circuit discover --model ckpt/safegrad_sandesh --name safegrad_sandesh --n "$CK_N"
+  fi
+fi
+opt ck_sweep_base python -m sandesh.circuit sweep --model "$BASE" --name base --bs "$BS_MT"
+if [ -e ckpt/safegrad_sandesh ]; then
+  opt ck_sweep_safegrad python -m sandesh.circuit sweep --model ckpt/safegrad_sandesh --name safegrad_sandesh --baseline-only --bs "$BS_MT"
+fi
+opt ck_knockout      python -m sandesh.circuit knockout --model "$BASE" --out ckpt/base_knockout
+opt ck_knockout_rand python -m sandesh.circuit knockout --model "$BASE" --out ckpt/base_knockout_rand --random-seed 0
+for name in base_knockout base_knockout_rand; do
+  [ -e "ckpt/$name/knockout.json" ] || { echo "[skip] eval $name: no ckpt/$name"; continue; }
+  opt "eval_$name" python -m sandesh.evaluate --model "ckpt/$name" --name "$name" --no-harmful --no-benign --bs "$BS_GEN"
+  opt "cap_$name"  python -m sandesh.capability --model "ckpt/$name" --name "$name" --n "$MMLU_N" --bs "$BS_MT"
+done
+
+# --- add-on 3: is SafeGrad better than just mixing the refusals in? ----------------
 opt curate_mix     python -m sandesh.curate --only train_mix
 opt train_sft_mix  python -m sandesh.train --method plain --data data/curated/train_mix --out ckpt/sft_mix --epochs "$EPOCHS" --bs "$BS_TRAIN"
 opt eval_sft_mix   python -m sandesh.evaluate --model ckpt/sft_mix --name sft_mix --bs "$BS_GEN"
 
-# --- add-on 3: adaptive best-of-N attack and multi-turn escalation -------------------
+# --- add-on 4: adaptive best-of-N attack and multi-turn escalation -------------------
 for spec in "base|$BASE|base" "base_spotlight|$BASE|spotlight" "sft_sandesh|ckpt/sft_sandesh|base" \
             "sft_mix|ckpt/sft_mix|base" "safegrad_sandesh|ckpt/safegrad_sandesh|base"; do
   IFS='|' read -r name model prompt <<< "$spec"
@@ -103,7 +126,7 @@ for spec in "base|$BASE|base" "base_spotlight|$BASE|spotlight" "sft_sandesh|ckpt
   opt "mt_$name"  python -m sandesh.multiturn --model "$model" --name "$name" --prompt "$prompt" --bs "$BS_MT"
 done
 
-# --- add-on 4: over-refusal (XSTest) and capability (Global-MMLU) per set of weights --
+# --- add-on 5: over-refusal (XSTest) and capability (Global-MMLU) per set of weights --
 for spec in "base|$BASE" "sft_clean|ckpt/sft_clean" "sft_sandesh|ckpt/sft_sandesh" "sft_mix|ckpt/sft_mix" \
             "safegrad_sandesh|ckpt/safegrad_sandesh"; do
   IFS='|' read -r name model <<< "$spec"

@@ -28,13 +28,15 @@ from pathlib import Path
 from .tools import TARGET_ARGS, is_valid, parse_action
 from .world import REPLY_TASKS, TEST_SPLITS
 
-CONDITION_ORDER = ["base", "base_defensive", "base_spotlight", "base_guard", "sft_clean", "sft_sandesh", "sft_mix",
-                   "safegrad_sandesh"]
+CONDITION_ORDER = ["base", "base_defensive", "base_spotlight", "base_guard", "base_knockout", "base_knockout_rand",
+                   "sft_clean", "sft_sandesh", "sft_mix", "safegrad_sandesh"]
 CONDITION_LABELS = {
     "base": "Tiny Aya Fire",
     "base_defensive": "+ defensive system prompt",
     "base_spotlight": "+ spotlighting & sandwich prompt",
     "base_guard": "+ Qwen3Guard SMS filter",
+    "base_knockout": "− injection heads zeroed (CircuitKIT)",
+    "base_knockout_rand": "− as many random heads zeroed (control)",
     "sft_clean": "SFT, clean inboxes only (control)",
     "sft_sandesh": "SFT on Sandesh (PlainSFT)",
     "sft_mix": "SFT + refusals mixed in (PlainSFT)",

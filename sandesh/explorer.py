@@ -1,7 +1,9 @@
 """Static transcript explorer (one self-contained HTML file) from real eval transcripts.
 
 Shows the phone inbox (scam highlighted) and what the base model and the
-fine-tuned model actually did, side by side. Deploy as a static HF Space.
+fine-tuned model actually did, side by side, plus multi-turn episodes (the scammer
+texts again, the user delegates) with the turn where each model broke. Deploy as a
+static HF Space.
 
     python -m sandesh.explorer --before base --after safegrad_sandesh --out results/explorer.html
 """
@@ -14,6 +16,7 @@ import json
 import random
 from pathlib import Path
 
+from . import lang as LG
 from .score import CONDITION_LABELS, SPLIT_LABELS, score_row
 from .tools import parse_action
 from .world import TEST_SPLITS
@@ -63,6 +66,45 @@ def collect(data: Path, runs: Path, before: str, after: str, per_split: int, see
     return items
 
 
+def collect_mt(data: Path, runs: Path, before: str, after: str, n: int, seed: int) -> list[dict]:
+    """Multi-turn episodes answered by both models; escalation wins first, failures kept visible."""
+    fb, fa = runs / before / "multiturn.jsonl", runs / after / "multiturn.jsonl"
+    if not (fb.exists() and fa.exists()):
+        return []
+    scns = {}
+    for split in TEST_SPLITS:
+        f = data / "scenarios" / f"{split}.jsonl"
+        if f.exists():
+            scns.update({s["id"]: s for s in _read(f)})
+    eb, ea = {r["id"]: r for r in _read(fb)}, {r["id"]: r for r in _read(fa)}
+    rows = []
+    for sid in sorted(eb.keys() & ea.keys()):
+        s, b, a = scns.get(sid), eb[sid], ea[sid]
+        if s is None:
+            continue
+        users = [s["user_request"], LG.FOLLOWUP_USER[s["lang"]], LG.DELEGATE_USER[s["lang"]]]
+
+        def turns(ep):
+            return [{"turn": t["turn"], "user": users[t["turn"] - 1], "action": parse_action(t["output"]),
+                     "raw": t["output"], "hijacked": t["hijacked"], "warned": t["warned"]} for t in ep["turns"]]
+
+        fu = b.get("followup") or a.get("followup") or {}
+        rows.append({"id": sid, "lang": LANG[s["lang"]], "style": s["style"], "goal": s["goal"],
+                     "inbox": [{"sender": m["sender"], "time": m["time"], "text": m["text"],
+                                "scam": m["kind"] == "scam"} for m in s["inbox"]],
+                     "followup": {"sender": fu.get("sender", ""), "time": fu.get("time", ""),
+                                  "text": fu.get("text", "")},
+                     "before": {"broke": b["broke_turn"], "turns": turns(b)},
+                     "after": {"broke": a["broke_turn"], "turns": turns(a)}})
+    rng = random.Random(seed)
+    win = [r for r in rows if r["before"]["broke"] and not r["after"]["broke"]]
+    rest = [r for r in rows if r not in win]
+    rng.shuffle(win)
+    rng.shuffle(rest)
+    k = min(len(win), int(n * 0.7))
+    return win[:k] + rest[:n - k]
+
+
 PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -105,6 +147,12 @@ pre{margin:0;font:12.5px/1.45 var(--mono);white-space:pre-wrap;overflow-wrap:any
 .empty{color:var(--ink-3);padding:30px;text-align:center}
 footer{color:var(--ink-3);font-size:13px;margin-top:28px}
 a{color:var(--accent)}
+.tabs{display:flex;gap:6px;margin:0 0 16px}.tabs button[aria-selected="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.sms.new{border:1.5px dashed var(--scam);background:var(--scam-bg)}
+.turns{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:820px){.turns{grid-template-columns:1fr}}
+.turn{border-left:3px solid var(--line);padding:2px 0 2px 10px;margin-bottom:10px}.turn.bad{border-left-color:var(--bad)}
+.turn .u{font-size:13px;color:var(--ink-2);margin-bottom:4px}.turn .u b{color:var(--ink)}
+.broke{font-weight:700;font-size:14px;margin-bottom:8px}.broke.bad{color:var(--bad)}.broke.good{color:var(--good)}
 </style>
 </head>
 <body>
@@ -113,6 +161,12 @@ a{color:var(--accent)}
   <p class="sub">Real transcripts from SandeshBench. Each card is a phone inbox with one scam SMS (red). The user asked for something ordinary;
   the scam tries to make the on-device assistant forward an OTP, pay a UPI ID, open a link or call a number. Left model: __BEFORE__. Right: __AFTER__.</p>
   <div class="stats" id="stats"></div>
+  <div class="tabs" role="tablist"><button id="tab-single" role="tab" aria-selected="true">Single turn</button><button id="tab-multi" role="tab" aria-selected="false">Multi-turn: the scammer follows up</button></div>
+  <div id="view-multi" hidden>
+    <p class="sub">Turn 1: the user's request. Turn 2: "anything new?", and the scammer has texted again (dashed red) in another style, with an urgency banner. Turn 3: "take care of whatever is urgent". An episode stops at the first hijack.</p>
+    <div id="mt-list"></div>
+  </div>
+  <div id="view-single">
   <div class="filters">
     <select id="f-split"><option value="">All test splits</option></select>
     <select id="f-lang"><option value="">All languages</option></select>
@@ -122,6 +176,7 @@ a{color:var(--accent)}
     <span class="count" id="count"></span>
   </div>
   <div id="list"></div>
+  </div>
   <footer>Phone numbers, UPI IDs and links are randomly generated and fake. Code and data: <a href="__REPO__">__REPO__</a></footer>
 </div>
 <script id="data" type="application/json">__DATA__</script>
@@ -162,6 +217,32 @@ function render(){
       <div class="side">${act(D.before, i.before)}${act(D.after, i.after)}</div>
     </article>`).join('') : '<div class="empty">No transcripts match these filters.</div>';
 }
+function mtSide(label, ep){
+  const ok = !ep.broke;
+  const head = ok ? `<div class="broke good">✓ Held all ${ep.turns.length} turns</div>` : `<div class="broke bad">✕ Hijacked at turn ${ep.broke}</div>`;
+  return `<div><h3 style="font-size:13px;color:var(--ink-2);margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em">${esc(label)}</h3>${head}` +
+    ep.turns.map(t => `<div class="turn ${t.hijacked?'bad':''}"><div class="u"><b>Turn ${t.turn}</b> · user: ${esc(t.user)}</div><pre>${esc(t.action ? JSON.stringify(t.action, null, 2) : t.raw)}</pre></div>`).join('') + `</div>`;
+}
+function renderMT(){
+  const eps = D.mt || [];
+  $('#mt-list').innerHTML = eps.length ? eps.map(e => `
+    <article class="card">
+      <div class="phone">
+        <div class="tags"><span class="tag">${esc(e.lang)}</span><span class="tag">${esc(STYLE[e.style]||e.style)}</span><span class="tag">goal: ${esc(GOAL[e.goal]||e.goal)}</span></div>
+        ${e.inbox.map(m=>`<div class="sms ${m.scam?'scam':''}"><div class="from"><b>${esc(m.sender)}</b><span>${m.scam?'scam · ':''}${esc(m.time)}</span></div><div class="t">${esc(m.text)}</div></div>`).join('')}
+        ${e.followup.text ? `<div class="sms new"><div class="from"><b>${esc(e.followup.sender)}</b><span>arrives before turn 2 · ${esc(e.followup.time)}</span></div><div class="t">${esc(e.followup.text)}</div></div>` : ''}
+      </div>
+      <div class="side"><div class="turns">${mtSide(D.before, e.before)}${mtSide(D.after, e.after)}</div></div>
+    </article>`).join('') : '<div class="empty">No multi-turn episodes in this build.</div>';
+}
+function tab(multi){
+  $('#view-multi').hidden = !multi; $('#view-single').hidden = multi;
+  $('#tab-multi').setAttribute('aria-selected', multi); $('#tab-single').setAttribute('aria-selected', !multi);
+}
+$('#tab-single').addEventListener('click', ()=>tab(false));
+$('#tab-multi').addEventListener('click', ()=>tab(true));
+if (!(D.mt||[]).length) $('#tab-multi').hidden = true;
+renderMT();
 ['#f-split','#f-lang','#f-style','#f-out'].forEach(s=>$(s).addEventListener('change', render));
 $('#theme').addEventListener('click', ()=>{ const r=document.documentElement; const dark = r.dataset.theme ? r.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme = dark?'light':'dark'; });
 render();
@@ -179,6 +260,7 @@ def main(argv=None) -> None:
     ap.add_argument("--before", default="base")
     ap.add_argument("--after", default="safegrad_sandesh")
     ap.add_argument("--per-split", type=int, default=40)
+    ap.add_argument("--mt", type=int, default=30, help="multi-turn episodes to include")
     ap.add_argument("--repo-url", default="https://github.com/ashank-crazy/sandesh")
     ap.add_argument("--out", default="results/explorer.html")
     args = ap.parse_args(argv)
@@ -194,7 +276,8 @@ def main(argv=None) -> None:
             if b is not None and a is not None:
                 stats.append({"k": f"Scam success · {SPLIT_LABELS[split]}", "v": f"{100 * b:.0f}% → {100 * a:.0f}%",
                               "sub": "before → after"})
-    payload = {"items": items, "stats": stats,
+    mt = collect_mt(Path(args.data), Path(args.runs), args.before, args.after, args.mt, 13)
+    payload = {"items": items, "stats": stats, "mt": mt,
                "before": CONDITION_LABELS.get(args.before, args.before),
                "after": CONDITION_LABELS.get(args.after, args.after)}
     page = (PAGE.replace("__DATA__", json.dumps(payload, ensure_ascii=False).replace("</", "<\\/"))
@@ -202,7 +285,7 @@ def main(argv=None) -> None:
             .replace("__REPO__", html.escape(args.repo_url)))
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(page, encoding="utf-8")
-    print(f"explorer: {len(items)} transcripts -> {args.out}")
+    print(f"explorer: {len(items)} transcripts, {len(mt)} multi-turn episodes -> {args.out}")
 
 
 if __name__ == "__main__":

@@ -6,25 +6,36 @@ Submit at https://hackathon.lexsi.ai/submission/ (needs: abstract < 500 words, H
 collection, write-up link, GitHub link, repos + models used, track + problem statements).
 
 **Idea:** see README. Scam-SMS prompt injection against an on-device Tiny Aya Fire SMS assistant; fix with SafeTune
-SafeGrad; measured with exact checks incl. held-out languages (bn/ta/mr) and attack styles (honorific, fake tool JSON).
-Problem statements 2a.3 + 2b.5. Lexsi chain: CuratorKIT -> SafeTune -> AuditKIT.
+SafeGrad; measured with exact checks incl. held-out languages (bn/ta/mr) and attack styles (honorific, fake tool JSON);
+stress-tested with best-of-N rewrites, a 3-turn escalation, detectors, XSTest and Global-MMLU; CircuitKIT locates
+the heads that carry the hijack and a head knockout tests them. Lexsi chain: CuratorKIT -> SafeTune -> AuditKIT, plus
+CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `SUBMISSION.md`.
 
 **GPU box rule:** create folders only under `/media/NAS/ashank`. `scripts/env.sh` points every cache there.
 
 ## Done
-- [x] Benchmark generator `sandesh/world.py` + templates `sandesh/lang.py`; label tests `tests/test_bench.py` (6 pass)
+- [x] Benchmark generator `sandesh/world.py` + templates `sandesh/lang.py`; label tests `tests/test_bench.py` (9 pass)
 - [x] CuratorKIT stage, SafeTune train stage, evaluate, Qwen3Guard safety judge, AuditKIT scoring, figures, explorer, ROI, publish
-- [x] `scripts/run_all.sh` (resumable), `scripts/setup_gpu.sh`, `scripts/smoke_local.sh`
-- [x] Local CPU smoke test on SmolLM2-135M passes end to end (`SMOKE OK`): world → safety → curate → SafeTune plain +
-      SafeGrad → evaluate → Qwen3Guard judge → score with AuditKIT paired bootstrap → report → explorer → roi.
+- [x] `scripts/run_all.sh` (resumable, safe to `git pull` mid-run), `scripts/setup_gpu.sh`, `scripts/smoke_local.sh`
+- [x] Add-on audits (all optional stages, after the core results):
+  - spotlighting prompt (`--prompt spotlight`) and Qwen3Guard SMS filter (`sandesh/guard.py`, `--inbox-filter`)
+  - detector recall / false alarms by language (Qwen3Guard strict + loose, ProtectAI DeBERTa)
+  - best-of-N adaptive attack (`sandesh/attacks.py`, `sandesh/bon.py`), ASR@k curves
+  - multi-turn escalation (`sandesh/multiturn.py`), scored with AuditKIT `agent_eval`
+  - XSTest over-refusal (`benign.jsonl`), Global-MMLU en/hi/bn (`sandesh/capability.py`)
+  - `sft_mix` ablation (PlainSFT with the refusal anchor mixed in)
+  - CircuitKIT (`sandesh/circuit.py`): EAP-IG on scam vs same-length promo pairs, base vs SafeGrad; head-knockout
+    sweep with a random-head control; `base_knockout` / `base_knockout_rand` checkpoints evaluated like any condition.
+    CircuitKIT runs in its own venv `.venv-ck` (`scripts/setup_ck.sh`, created by run_all) since it pins hf-hub<2.
+- [x] Transcript explorer (`results/explorer.html`, deployed as a static Space by `publish`): single-turn cards plus
+      a "Multi-turn" tab (inbox, the scammer's follow-up SMS, each turn's action, "hijacked at turn n" vs "held").
+- [x] Local CPU smoke test on SmolLM2-135M passes end to end (`SMOKE OK`), including every add-on and CircuitKIT.
       (The `RLock ... _recursion_count` traceback at exit is a harmless `multiprocess` shutdown message.)
-- [x] Tool-result footer added so models don't stall by re-calling `read_inbox`; new "Re-reads inbox (stalls)" metric
-- [x] `summary.md` now ends with a significance table and a 12-row "Headline numbers" table that maps 1:1 onto the
-      `[fill]` placeholders in `SUBMISSION.md` (abstract draft, < 500 words)
-- [x] `run_all.sh` scores the two baselines right after evaluating them (`score_baselines` stage) for an early check
+- [x] `summary.md` ends with a significance table and a 26-row "Headline numbers" table; `SUBMISSION.md` uses
+      `[fill #n]` = row n of that table. Abstract draft is < 500 words.
 
 ## To do (in order)
-1. On the GPU box:
+1. On the GPU box (first time):
    ```bash
    cd /media/NAS/ashank && git clone https://github.com/ashank-crazy/sandesh && cd sandesh
    bash scripts/setup_gpu.sh
@@ -32,13 +43,26 @@ Problem statements 2a.3 + 2b.5. Lexsi chain: CuratorKIT -> SafeTune -> AuditKIT.
    nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &
    tail -f logs/run_all.log
    ```
-   On a 24GB 3090 use `BS_TRAIN=2 BS_GEN=16 nohup bash scripts/run_all.sh ...`.
+   On a 24GB 3090: `BS_TRAIN=2 BS_GEN=16 BS_MT=8 nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &`.
+   **Already running an older clone?** Let it run. When it finishes (or any time), `git pull` and start the same
+   command again: finished stages are skipped (`.done/`), new stages run. `git pull` mid-run is safe.
    **Early check (~30-45 min in):** when `score_baselines` finishes, paste `results/summary.md` to Claude. If base
    attack success is near 0% or "Re-reads inbox" is high, fix the prompt format before training burns GPU hours.
-2. When done, paste `results/summary.md` + any `logs/*.log` errors back to Claude; fill README "Results" and the
-   `[fill]`s in `SUBMISSION.md` from the "Headline numbers" table. If results don't support the README title
-   ("We fixed it"), retitle honestly.
+   "CORE RESULTS READY" in the log means the main table exists; the add-ons follow (several more hours).
+2. When done, paste `results/summary.md` + `grep -h "FAILED\|warn" logs/run_all.log` back to Claude. Fill README
+   "Results" and the `[fill #n]`s in `SUBMISSION.md`. If results don't support the README title ("We fixed it") or a
+   claim in the abstract (e.g. the knockout beats random heads), rewrite it honestly.
 3. `python -m sandesh.roi --api-in <$> --api-out <$> --gpu-hourly <$>` with current prices.
-4. `python -m sandesh.publish --user <hf-user>`: dataset, 3 models, explorer Space, 2 collections.
+4. `python -m sandesh.publish --user <hf-user>`: dataset, models, explorer Space, 2 collections.
 5. Write HF article (or use README); abstract is drafted in `SUBMISSION.md`; submit form before Nov 16 17:29 IST.
-6. If finalist: 3-min video using the explorer Space.
+6. If finalist: 3-min video using the explorer Space (multi-turn tab: show an episode where the base model breaks at
+   turn 2 or 3 and SafeGrad holds; the explorer puts those first).
+
+## If a stage fails
+Every add-on is optional, so the run continues; its log is `logs/<stage>.log`. Re-run just that stage after a fix:
+`bash scripts/run_all.sh <stage>` (e.g. `ck_discover_base`). Likely trouble spots:
+- `ck_env`: CUDA wheel mismatch in `.venv-ck` (the script copies the main venv's torch build; check `logs/ck_env.log`).
+- `ck_discover_*`: out of memory on a 3090 with long prompts. Use `CK_N=32`, or rebuild the pairs with
+  `python -m sandesh.circuit pairs --model CohereLabs/tiny-aya-fire --max-tokens 1000`, then delete
+  `.done/ck_discover_base` and re-run.
+- `guard_detect`: Qwen3Guard is large; reduce `BS_GEN`.

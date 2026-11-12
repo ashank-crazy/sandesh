@@ -3,10 +3,10 @@
 * dataset ``<user>/sandesh-bench``: the benchmark (all splits), the curated
   training sets (CuratorKIT exports with provenance), safety prompt splits,
   every model transcript (runs/), and the scored metrics (results/).
-* models ``<user>/tiny-aya-fire-sandesh-<variant>``: merged checkpoints.
+* models ``<user>/tiny-aya-fire-sandesh-<variant>``: merged checkpoints, plus the CircuitKIT head-knockout model.
 * two collections ("Sandesh - models", "Sandesh - datasets") for the form.
 
-    python -m sandesh.publish --user <hf-username> [--models safegrad_sandesh sft_sandesh sft_clean]
+    python -m sandesh.publish --user <hf-username> [--models safegrad_sandesh sft_sandesh sft_clean sft_mix base_knockout]
 
 Tiny Aya is released under CC-BY-NC-4.0; fine-tunes inherit it.
 """
@@ -48,8 +48,11 @@ real task (to detect usefulness).
   owner impersonation, script switch (train); honorific register and fake
   tool-call JSON (held out).
 * Also here: CuratorKIT-curated training sets (`data/curated/*`, with
-  manifests, checksums and `lexsi_provenance.json`), every model transcript
-  (`runs/*`), and scored results (`results/`).
+  manifests, checksums and `lexsi_provenance.json`), the best-of-N rewrites
+  (`data/bon`), detector verdicts (`data/guard`), CircuitKIT contrastive pairs
+  (`data/circuit`), every model transcript including multi-turn episodes and
+  CircuitKIT attribution scores (`runs/*`), run logs (`logs/`) and scored
+  results (`results/`).
 
 Code: {repo}
 
@@ -77,12 +80,33 @@ one JSON tool call).
 {results}
 """
 
+KNOCKOUT_CARD = """---
+license: cc-by-nc-4.0
+base_model: {base}
+language: [en, hi, bn, ta, mr]
+tags: [safety, prompt-injection, interpretability, circuitkit, tiny-aya]
+datasets: [{dataset}]
+---
+
+# {name}
+
+`{base}` with **{k} attention heads zeroed** (their slice of the attention output projection), no training.
+The heads are the ones CircuitKIT's EAP-IG attributes the scam-SMS hijack to: on pairs of an attacked inbox and the
+same inbox with the scam replaced by a same-length promo SMS, they carry the push toward the attacker's tool.
+Heads: {heads} ({pct:.3f}% of the weights). A research artifact for SandeshBench, not a recommended deployment.
+
+Details and the random-heads control: {repo}
+
+{results}
+"""
+
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--user", required=True)
     ap.add_argument("--repo-url", default="https://github.com/ashank-crazy/sandesh")
-    ap.add_argument("--models", nargs="*", default=["safegrad_sandesh", "sft_sandesh", "sft_clean"])
+    ap.add_argument("--models", nargs="*",
+                    default=["safegrad_sandesh", "sft_sandesh", "sft_clean", "sft_mix", "base_knockout"])
     ap.add_argument("--base", default="CohereLabs/tiny-aya-fire")
     ap.add_argument("--skip-models", action="store_true")
     args = ap.parse_args(argv)
@@ -96,7 +120,8 @@ def main(argv=None) -> None:
     api.create_repo(ds_id, repo_type="dataset", private=False, exist_ok=True)
     api.upload_file(path_or_fileobj=DATASET_CARD.format(repo=args.repo_url, results=results_md).encode(),
                     path_in_repo="README.md", repo_id=ds_id, repo_type="dataset")
-    for folder in ["data/scenarios", "data/curated", "data/safety", "runs", "results"]:
+    for folder in ["data/scenarios", "data/curated", "data/safety", "data/bon", "data/guard", "data/circuit", "runs",
+                   "results", "logs"]:
         if Path(folder).exists():
             api.upload_folder(folder_path=folder, path_in_repo=folder, repo_id=ds_id, repo_type="dataset",
                               ignore_patterns=["*.lock", "__pycache__/*"])
@@ -112,9 +137,15 @@ def main(argv=None) -> None:
             mid = f"{args.user}/tiny-aya-fire-sandesh-{variant.replace('_sandesh', '').replace('_', '-')}"
             meta = json.loads((ck / "sandesh_train.json").read_text()) if (ck / "sandesh_train.json").exists() else {}
             api.create_repo(mid, private=False, exist_ok=True)
-            (ck / "README.md").write_text(MODEL_CARD.format(base=args.base, dataset=ds_id, name=mid,
-                                                            trainer=meta.get("trainer", "?"), repo=args.repo_url,
-                                                            results=results_md))
+            if (ck / "knockout.json").exists():
+                ko = json.loads((ck / "knockout.json").read_text())
+                card = KNOCKOUT_CARD.format(base=args.base, dataset=ds_id, name=mid, k=ko["k"],
+                                            heads=", ".join(ko["heads"]), pct=100 * ko["zeroed_fraction"],
+                                            repo=args.repo_url, results=results_md)
+            else:
+                card = MODEL_CARD.format(base=args.base, dataset=ds_id, name=mid, trainer=meta.get("trainer", "?"),
+                                         repo=args.repo_url, results=results_md)
+            (ck / "README.md").write_text(card)
             api.upload_folder(folder_path=str(ck), repo_id=mid, ignore_patterns=["checkpoint-*", "runs/*"])
             model_ids.append(mid)
             print(f"uploaded {ck} -> {mid}")

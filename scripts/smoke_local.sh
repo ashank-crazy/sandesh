@@ -44,6 +44,23 @@ done
 echo "== 10. capability"
 $PY -m sandesh.capability --runs "$W/runs" --model "$M" --name base --n 3 --bs 6
 $PY -m sandesh.capability --runs "$W/runs" --model "$W/ckpt/safegrad_sandesh" --name safegrad_sandesh --n 3 --bs 6
+echo "== 10b. CircuitKIT"
+PY_CK=${PY_CK:-.venv-ck/bin/python}
+$PY -m sandesh.circuit pairs --data "$W/data" --model "$M"
+if [ -x "$PY_CK" ]; then
+  CK="--data $W/data --runs $W/runs"
+  $PY_CK -m sandesh.circuit discover $CK --model "$M" --name base --n 2 --ig-steps 2 --dtype float32 --cpu-ok
+  $PY_CK -m sandesh.circuit discover $CK --model "$W/ckpt/safegrad_sandesh" --name safegrad_sandesh --n 2 --ig-steps 2 --dtype float32 --cpu-ok
+  $PY -m sandesh.circuit sweep $CK --model "$M" --name base --limit 4 --n-random 1
+  $PY -m sandesh.circuit sweep $CK --model "$W/ckpt/safegrad_sandesh" --name safegrad_sandesh --baseline-only --limit 4
+  $PY -m sandesh.circuit knockout $CK --model "$M" --out "$W/ckpt/base_knockout" --k 2
+  $PY -m sandesh.circuit knockout $CK --model "$M" --out "$W/ckpt/base_knockout_rand" --k 2 --random-seed 0
+  $PY -m sandesh.evaluate --model "$W/ckpt/base_knockout" --name base_knockout --no-harmful --no-benign $EV
+  $PY -m sandesh.evaluate --model "$W/ckpt/base_knockout_rand" --name base_knockout_rand --no-harmful --no-benign $EV
+  $PY -m sandesh.capability --runs "$W/runs" --model "$W/ckpt/base_knockout" --name base_knockout --n 3 --bs 6
+else
+  echo "(no CircuitKIT env at $PY_CK: skipping attribution and knockout)"
+fi
 echo "== 11. judge";  $PY -m sandesh.safety judge --data "$W/data" --runs "$W/runs" --judge "$J" --bs 8
 echo "== 12. score";  $PY -m sandesh.score --data "$W/data" --runs "$W/runs" --out "$W/results"
 echo "== 13. report"; $PY -m sandesh.report --results "$W/results"

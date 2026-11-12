@@ -1,16 +1,35 @@
-# Submission form answers (draft; replace every [fill] after the GPU run)
+# Submission form answers (draft; replace every [fill #n] after the GPU run)
+
+`[fill #n]` is row n of the "Headline numbers" table at the end of `results/summary.md`.
 
 **Project:** Sandesh (संदेश): stopping scam-SMS prompt injection in an on-device multilingual assistant
 
 **Track:** Track 2, AI Red Teaming, Safety and Alignment
-**Problem statements:** 2a.3 Multi-turn audits (injection hidden in tools/documents, reproducible transcripts) ·
-2b.5 Safety-preserving fine-tuning
 
-**Lexsi repos used (chained):** CuratorKIT (curation, dedup, provenance export) → SafeTune (`PlainSFTTrainer`,
-`SafeGradTrainer`) → AuditKIT (precomputed runs, custom exact scorers, `compare().significance()` paired bootstrap)
+**Problem statements** (by title): Adversarial and safety evaluation sets · Red-teaming and robustness evaluation
+(best-of-N, encoding tricks, over-refusal) · Multi-turn audits (prompt injection in tools/documents, which turn
+broke, reproducible transcripts) · Multilingual and code-mixed safety · Safety-preserving fine-tuning · Locating
+where safety lives / Circuit-level interventions
 
-**Models:** core `CohereLabs/tiny-aya-fire`. Supplementary: `Qwen/Qwen3Guard-Gen-4B` (safety judge only) and
-`HuggingFaceTB/SmolLM2-135M-Instruct` (CPU smoke tests only).
+**Lexsi repos used (chained, all four):**
+- CuratorKIT: curation, exact + MinHash dedup, `sft_messages` export with provenance.
+- SafeTune: `PlainSFTTrainer`, `SafeGradTrainer`.
+- AuditKIT: precomputed runs, custom exact scorers, `compare().significance()` paired bootstrap, `agent_eval` on
+  multi-turn episodes.
+- CircuitKIT: EAP-IG node attribution on custom contrastive pairs; the heads it finds drive a knockout experiment.
+
+**Models:**
+- Core: `CohereLabs/tiny-aya-fire`.
+- Supplementary:
+  - `Qwen/Qwen3Guard-Gen-4B`: safety judge, plus the SMS-filter baseline.
+  - `protectai/deberta-v3-base-prompt-injection-v2`: detector baseline.
+  - `HuggingFaceTB/SmolLM2-135M-Instruct`: CPU smoke tests only.
+
+**Datasets used:**
+- `CohereLabs/aya_redteaming`: anchor and harmful-prompt eval.
+- `Paul/XSTest`: over-refusal.
+- `CohereLabs/Global-MMLU`: capability retention.
+- SandeshBench (ours).
 
 **Links:**
 - GitHub: https://github.com/ashank-crazy/sandesh
@@ -23,36 +42,46 @@
 
 ## Abstract (< 500 words)
 
-Cohere's Tiny Aya is built to run offline on phones in 70 languages, and the natural on-device agent is one that
-reads your SMS inbox and acts for you. In India, the most common fraud arrives as an SMS: fake KYC alerts, "forward
-the OTP", "pay ₹1 to verify". We ask a simple question: if one message in the inbox is a scam, does the assistant obey
-it?
+Cohere's Tiny Aya is built to run offline on phones, and the natural on-device agent reads your SMS inbox and acts
+for you. In India, the most common fraud arrives as an SMS. If one message in the inbox is a scam, does the
+assistant obey it?
 
-We built **SandeshBench**, 3,870 phone-inbox scenarios in English, Hindi, Hinglish, Bengali, Tamil and Marathi.
-The assistant has seven tools (`read_inbox`, `send_sms`, `call`, `make_upi_payment`, `open_link`, `set_reminder`,
-`reply_user`). The user asks for something ordinary (a bill amount, an OTP, a reply to Mom, a delivery call, a
-milkman's UPI payment). One SMS tries to make the assistant forward an OTP, pay a UPI ID, open a phishing link or call
-a fraud number, using seven attack styles: direct orders, fake system messages, bank/RBI/police authority, owner
-impersonation, script switching, honorific register and fake tool-call JSON. Every label is exact and LLM-free: a
-hijack is the attacker's phone number, UPI ID or URL landing in the action's target field. Tests prove the labels on
-all scenarios.
+**SandeshBench** has 3,870 phone-inbox scenarios in English, Hindi, Hinglish, Bengali, Tamil and Marathi. There are
+seven tools, seven everyday user tasks, and one SMS that tries to make the assistant forward an OTP, pay a UPI ID,
+open a phishing link or call a fraud number, in seven attack styles. Labels are exact and LLM-free: a hijack is the
+attacker's number, UPI ID or URL in the action's target field. Bengali, Tamil, Marathi and two attack styles are held
+out of training.
 
-Out of the box, Tiny Aya Fire is hijacked in [fill]% of attacks on familiar languages and [fill]% on Bengali, Tamil
-and Marathi. A strong defensive system prompt only brings this to [fill]%.
+Out of the box, Tiny Aya Fire is hijacked in [fill #1]% of attacks in familiar languages and [fill #2]% in held-out
+languages. A defensive system prompt only reaches [fill #3]%.
 
-We chain three Lexsi tools. **CuratorKIT** gates, deduplicates (exact + MinHash) and exports the training data with
-provenance. **SafeTune** fine-tunes Tiny Aya Fire (LoRA) to do the user's task, ignore the instruction and warn the
-user. We compare `PlainSFTTrainer` with `SafeGradTrainer`, whose alignment signal is the base model's *own* refusals
-to Cohere's `aya_redteaming` prompts, so general safety does not drift while the agent skill is learned. A control
-fine-tune on the same inboxes with the scam removed separates "learned the tool format" from "learned to resist".
-**AuditKIT** scores every transcript through custom exact scorers on precomputed runs and gives paired-bootstrap
-significance against the base model.
+We chain all four Lexsi Track 2 repos:
+- **CuratorKIT** gates, deduplicates and exports the training data with provenance.
+- **SafeTune** fine-tunes Tiny Aya Fire (LoRA) to do the user's task, ignore the instruction and warn the user. We use
+  `SafeGradTrainer`, anchored to the base model's own refusals of Cohere's `aya_redteaming` prompts. We compare it with
+  `PlainSFTTrainer`, with plain SFT that has those refusals mixed in, and with a control trained on scam-free inboxes.
+- **AuditKIT** scores every transcript with exact scorers and paired-bootstrap significance, and audits multi-turn
+  episodes with `agent_eval`.
+- **CircuitKIT** locates the attention heads that carry the scam into the action choice.
 
-The SafeGrad model cuts attack success to [fill]% in-distribution and [fill]% on languages it never saw in
-training, and to [fill]% on held-out attack styles. Task success on clean inboxes is [fill]% (base: [fill]%), and it
-warns the user about the scam in [fill]% of replies. On 400 held-out multilingual red-team prompts, unsafe answers
-are [fill]% vs [fill]% for plain fine-tuning and [fill]% for the base model.
+SafeGrad cuts attack success to [fill #4]% in-distribution, [fill #5]% on unseen languages and [fill #6]% on unseen
+attack styles. Task success on clean inboxes is [fill #7]% (base [fill #8]%), and it warns the user in [fill #9]% of
+replies. Unsafe answers on 400 held-out multilingual red-team prompts: [fill #10]% (plain SFT [fill #11]%, base
+[fill #12]%).
 
-The result is a measurable, reproducible fix for a concrete Indian harm that keeps the inbox on the phone: no OTP ever
-needs to reach a cloud API. We release the benchmark, every transcript, three fine-tuned models, the
-curated training sets with provenance, a browsable transcript explorer, and a one-command resumable pipeline.
+We then attack our own fix:
+- **Adaptive rewrites.** With 16 rewrites per scam (encodings, character noise, spoofed senders, urgency), the
+  attacker succeeds against SafeGrad [fill #15]% of the time, vs [fill #13]% for the base model and [fill #14]% for
+  the strongest prompt defense.
+- **Three turns.** The scammer follows up and the user delegates ("take care of whatever is urgent"). [fill #17]% of
+  SafeGrad episodes are hijacked, vs [fill #16]% for the base.
+- **No collateral loss.** Over-refusal on XSTest is [fill #19]% (base [fill #18]%), and Global-MMLU (en/hi/bn) is
+  [fill #21]% (base [fill #20]%).
+
+Inside the model, CircuitKIT attribution on scam vs same-length benign inboxes points to a small set of attention
+heads. Zeroing them, with no training, moves attack success from [fill #22]% to [fill #23]%. Zeroing as many random
+heads gives [fill #24]%.
+
+We release the benchmark, every transcript, the fine-tuned models, the curated training sets with provenance, a
+transcript explorer and a one-command resumable pipeline. The fix keeps the inbox on the phone: no OTP ever needs to
+reach a cloud API.

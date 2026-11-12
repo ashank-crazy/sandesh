@@ -1,0 +1,3 @@
+# CircuitKIT stage only (scripts/setup_ck.sh installs this into .venv-ck).
+# CircuitKIT pins huggingface-hub<2 and transformer-lens 3.8, so it lives next to the main .venv.
+circuitkit==0.2.3
