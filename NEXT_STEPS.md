@@ -52,6 +52,23 @@ CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `
   ```bash
   source scripts/env.sh && python -m sandesh.score && python -m sandesh.report && python -m sandesh.explorer && python -m sandesh.roi
   ```
+- Early check passed (18:57 IST): base attack success 12.5% familiar / 16.0% held-out languages (14.0% all test
+  splits; script-switch scams 27.0%); defensive prompt 4.3% but clean-inbox task success 48.3% -> 38.8%; 0% inbox
+  re-reads, 98.7% valid tool calls. Restarted 18:57 IST on 1cf5772 with `BS_GEN=32 BS_MT=16` (only ~0-20% faster:
+  generation is GPU-bound, not overhead-bound). `train_sft_clean` started 19:20 IST. Baseline numbers are filled
+  in `SUBMISSION.md`; `⟦R1: ...⟧` markers there say what to keep depending on which add-ons finish.
+
+### Round-1 morning checklist (Nov 16)
+1. `grep ">>>\|<<<\|FAILED\|READY" logs/run_all.log | tail -25` on the box. "ROUND-1 RESULTS READY" = round-1 add-ons
+   scored. If it is not there by ~12:00 IST, run the CPU-only results command above (the run keeps going).
+2. Paste `results/summary.md` and that grep to Claude: fills README "Results" + `SUBMISSION.md`, fixes any claim the
+   numbers do not support (README title "We fixed it", "No collateral loss"), resolves the `⟦R1⟧` markers, pushes.
+3. ROI with current prices: `python -m sandesh.roi --api-in <$/M in> --api-out <$/M out> --gpu-hourly <$/h>`.
+4. Publish from the box by ~13:00 IST (uploads ~20 GB of models; only finished checkpoints are uploaded, so it is safe
+   while the run continues): `source scripts/env.sh && python -m sandesh.publish --user ashank-crazy`.
+   Put the printed collection, Space and dataset links into `SUBMISSION.md`.
+5. Claude tags the repo `round1` (README on GitHub is the write-up). Submit https://hackathon.lexsi.ai/submission/
+   before 17:29 IST with the answers in `SUBMISSION.md`.
 
 ## To do (in order)
 0. Restart the 18:00 run with the new settings (do it right after `<<< score_baselines done`, a stage boundary;

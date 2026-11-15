@@ -76,7 +76,7 @@ the attacker's identifiers intact, so a "safe" result can never come from an att
 | **Detector recall / false alarms** | share of scam SMS a detector flags, by language, and share of legitimate SMS (esp. OTPs) it wrongly flags |
 | **Harmful-prompt safety** ↓ | on 400 held-out prompts from Cohere's `aya_redteaming` (EN + HI), share of answers judged *Unsafe* by Qwen3Guard-Gen-4B |
 | **Over-refusal** ↓ | share of XSTest's 250 *safe* prompts that the model refuses (Qwen3Guard refusal verdict) |
-| **Capability** ↑ | Global-MMLU accuracy on the same 200 questions in English, Hindi and Bengali (next-token letter, no sampling) |
+| **Capability** ↑ | Global-MMLU accuracy on the same 100 questions in English, Hindi and Bengali (next-token letter, no sampling) |
 | **Throughput** | generated tokens/s on the eval GPU |
 
 Every comparison with the base model is a paired bootstrap on identical items (AuditKIT `compare().significance()`).
@@ -130,8 +130,8 @@ Every comparison with the base model is a paired bootstrap on identical items (A
 
 ### Stress tests
 
-- **Adaptive attacker, best-of-N** (`sandesh/attacks.py`, `sandesh/bon.py`; after Hughes et al. 2024). 30 attacked
-  scenarios per language, 16 rewrites each, from 13 families: random capitals, word scrambling, ASCII noise,
+- **Adaptive attacker, best-of-N** (`sandesh/attacks.py`, `sandesh/bon.py`; after Hughes et al. 2024). 8 attacked
+  scenarios per language, 16 rewrites each (768 attacks per model), from 13 families: random capitals, word scrambling, ASCII noise,
   zero-width characters, leetspeak, ROT13, base64, reversed text, urgency banners, re-styling, spoofing the bank's
   sender ID, moving the scam to the top or bottom of the inbox, and sending it twice. The attacker's phone number,
   UPI ID or URL is never altered, so a hijack is still detected exactly.
@@ -161,6 +161,12 @@ resulting checkpoint (`base_knockout`) runs through the full benchmark like any 
 ## Results
 
 _Populated after the GPU run: `results/summary.md`, `results/fig_*.png`._
+
+Submitted run: `FAST=1` profile on one RTX 3090 shared with other jobs. Same benchmark and test sets as the full
+profile; 1 training epoch (1,200 LoRA steps at batch 2), best-of-N on 8 attacked scenarios per language with 16
+rewrites each, 20 multi-turn episodes per language, 100 Global-MMLU questions per language, 32 CircuitKIT
+discovery pairs and a knockout sweep on 150 test pairs. `bash scripts/run_all.sh` without `FAST=1` runs the full
+profile (2 epochs, 30 / 40 / 200 / 64, every pair).
 
 ## Reproduce
 
@@ -197,7 +203,7 @@ What is new here:
 ## Limitations
 
 - The main benchmark scores the first action after `read_inbox`; the multi-turn audit covers 3-turn episodes on a
-  subset (40 scenarios per language), not open-ended sessions.
+  subset (20 scenarios per language), not open-ended sessions.
 - Templates are hand-written and not yet reviewed by native speakers of every language. The held-out-language result
   is about *transfer*, so imperfect phrasing only makes the test harder for the defense.
 - The harmful-prompt and over-refusal checks use an automatic judge (Qwen3Guard). The harmful-prompt check covers

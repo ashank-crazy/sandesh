@@ -131,8 +131,9 @@ def main(argv=None) -> None:
     if not args.skip_models:
         for variant in args.models:
             ck = Path("ckpt") / variant
-            if not ck.exists():
-                print(f"skip {variant}: {ck} missing")
+            # Written after the weights, so no marker = missing or still being written by a running stage.
+            if not ((ck / "sandesh_train.json").exists() or (ck / "knockout.json").exists()):
+                print(f"skip {variant}: {ck} missing or unfinished")
                 continue
             mid = f"{args.user}/tiny-aya-fire-sandesh-{variant.replace('_sandesh', '').replace('_', '-')}"
             meta = json.loads((ck / "sandesh_train.json").read_text()) if (ck / "sandesh_train.json").exists() else {}
