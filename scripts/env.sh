@@ -12,6 +12,8 @@ export TORCHINDUCTOR_CACHE_DIR=$NAS/.cache/inductor
 export MPLCONFIGDIR=$NAS/.cache/matplotlib
 export WANDB_DISABLED=true WANDB_MODE=disabled
 export TOKENIZERS_PARALLELISM=false
+# Less fragmentation of GPU memory: helps the borderline cases on a 24 GB card that other jobs share.
+[ -n "${PYTORCH_CUDA_ALLOC_CONF:-}" ] || export PYTORCH_ALLOC_CONF=${PYTORCH_ALLOC_CONF:-expandable_segments:True}
 export PATH=$UV_INSTALL_DIR:$PATH
 export SANDESH_BASE=${SANDESH_BASE:-CohereLabs/tiny-aya-fire}
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

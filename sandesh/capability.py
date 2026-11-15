@@ -58,7 +58,10 @@ def run(model_path: str, name: str, runs: Path, n: int, seed: int, bs: int, forc
         for b in range(0, len(prompts), bs):
             enc = tok(prompts[b:b + bs], return_tensors="pt", padding=True,
                       add_special_tokens=add_special).to(model.device)
-            logits = model(**enc).logits[:, -1, :].float()
+            try:  # last position only: full-sequence logits over a 262k vocabulary are GBs per batch
+                logits = model(**enc, logits_to_keep=1).logits[:, -1, :].float()
+            except TypeError:
+                logits = model(**enc).logits[:, -1, :].float()
             scores = torch.stack([logits[:, ids].max(dim=1).values for ids in cand], dim=1)
             preds += [LETTERS[i] for i in scores.argmax(dim=1).tolist()]
     rows = [{"id": q["id"], "lang": q["lang"], "subject": q["subject"], "answer": q["answer"], "pred": p,

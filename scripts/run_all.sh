@@ -5,16 +5,20 @@
 #   nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &     # everything
 #   bash scripts/run_all.sh eval_base eval_base_defensive          # just these stages
 #
-# Order: core results first (baselines, the three fine-tunes, scoring), then the add-on
-# audits (stronger baselines, best-of-N attack, multi-turn, detectors, over-refusal,
-# capability, mixing ablation, CircuitKIT circuit + head knockout). Core stages stop the run on failure; add-on stages are
-# optional: a failure is logged and the run continues.
+# Order: core results first (baselines, the three fine-tunes, judged and scored), then the add-ons,
+# cheapest and most useful first: capability + over-refusal, multi-turn + best-of-N attacks (round 1),
+# then CircuitKIT circuit + head knockout, stronger baselines (spotlight, guard filter), mixing ablation.
+# Core stages stop the run on failure; add-on stages are optional: a failure is logged and the run continues.
 #
 # Knobs (env): SANDESH_BASE (default CohereLabs/tiny-aya-fire), BS_TRAIN (4; use 2 on a 24GB 3090),
-#              BS_GEN (32; 16 on a 3090), BS_MT (16; 8 on a 3090), EPOCHS (2), JUDGE (Qwen/Qwen3Guard-Gen-4B),
-#              BON_PER_LANG (30), BON_K (16), MT_PER_LANG (40), MMLU_N (200), CK_N (64 CircuitKIT discovery pairs)
-#              FAST=1: deadline profile (EPOCHS 1, BON_PER_LANG 8, MT_PER_LANG 20, MMLU_N 100, CK_N 32); explicit
-#              values still win. Finish early with whatever is done: bash scripts/run_all.sh judge score report explorer roi
+#              BS_GEN (32), BS_MT (16): generation halves its batch by itself on CUDA out-of-memory,
+#              EPOCHS (2), JUDGE (Qwen/Qwen3Guard-Gen-4B), BON_PER_LANG (30), BON_K (16), MT_PER_LANG (40),
+#              MMLU_N (200), CK_N (64 CircuitKIT discovery pairs), CK_SWEEP_N (all: test pairs per knockout sweep)
+#              FAST=1: deadline profile (EPOCHS 1, BON_PER_LANG 8, MT_PER_LANG 20, MMLU_N 100, CK_N 32,
+#              CK_SWEEP_N 150); explicit values still win.
+# Results so far, while the run goes on (CPU only, safe alongside it):
+#   python -m sandesh.score && python -m sandesh.report && python -m sandesh.explorer && python -m sandesh.roi
+# Stop and finish with whatever is done: bash scripts/run_all.sh judge score report explorer roi
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/env.sh
@@ -40,7 +44,7 @@ fi
 BASE=$SANDESH_BASE
 if [ -n "${FAST:-}" ]; then  # deadline profile: same conditions and test sets; 1 epoch, smaller add-on samples
   EPOCHS=${EPOCHS:-1}; BON_PER_LANG=${BON_PER_LANG:-8}; MT_PER_LANG=${MT_PER_LANG:-20}
-  MMLU_N=${MMLU_N:-100}; CK_N=${CK_N:-32}
+  MMLU_N=${MMLU_N:-100}; CK_N=${CK_N:-32}; CK_SWEEP_N=${CK_SWEEP_N:-150}
 fi
 BS_TRAIN=${BS_TRAIN:-4}
 BS_GEN=${BS_GEN:-32}
@@ -52,6 +56,7 @@ BON_K=${BON_K:-16}
 MT_PER_LANG=${MT_PER_LANG:-40}
 MMLU_N=${MMLU_N:-200}
 CK_N=${CK_N:-64}
+CK_SWEEP_N=${CK_SWEEP_N:-}  # empty = every pair (the sweep is 25 passes over them)
 
 stage() {  # stage <name> <command...>: core stage, a failure stops the run
   local name=$1; shift
@@ -71,12 +76,25 @@ stage() {  # stage <name> <command...>: core stage, a failure stops the run
 opt() {  # opt <name> <command...>: optional stage, a failure is logged and the run continues
   stage "$@" || echo "[warn] optional stage $1 failed; continuing"
 }
+weights_addons() {  # weights_addons <name> <model>: over-refusal (XSTest) and capability (Global-MMLU)
+  local name=$1 model=$2
+  [ -e "$model" ] || [ "$model" = "$BASE" ] || { echo "[skip] benign/cap $name: no $model"; return 0; }
+  opt "benign_$name" python -m sandesh.evaluate --model "$model" --name "$name" --splits --no-harmful --bs "$BS_GEN"
+  opt "cap_$name"    python -m sandesh.capability --model "$model" --name "$name" --n "$MMLU_N" --bs "$BS_MT"
+}
+attack_addons() {  # attack_addons <name> <model> <prompt>: multi-turn escalation and adaptive best-of-N
+  local name=$1 model=$2 prompt=$3
+  [ -e "$model" ] || [ "$model" = "$BASE" ] || { echo "[skip] mt/bon $name: no $model"; return 0; }
+  opt "mt_$name"  python -m sandesh.multiturn --model "$model" --name "$name" --prompt "$prompt" --bs "$BS_MT"
+  opt "bon_$name" python -m sandesh.bon run --model "$model" --name "$name" --prompt "$prompt" --bs "$BS_GEN"
+}
 # Everything runs inside main(), and the call and `exit` share one line: bash parses the
 # whole function before running it, so a `git pull` mid-run cannot change the running script.
 main() {
 [ $# -gt 0 ] && ONLY="$*"
 echo "[$(date '+%F %T')] run_all $(git rev-parse --short HEAD 2>/dev/null || echo '?'): BASE=$BASE EPOCHS=$EPOCHS" \
      "BS_TRAIN=$BS_TRAIN BS_GEN=$BS_GEN BS_MT=$BS_MT BON=${BON_PER_LANG}x$BON_K MT=$MT_PER_LANG MMLU_N=$MMLU_N CK_N=$CK_N" \
+     "CK_SWEEP_N=${CK_SWEEP_N:-all}" \
      "${ONLY:+ONLY=$ONLY}"
 # Fail fast without a GPU: otherwise the run reaches eval_base and either crashes or crawls on the CPU for days.
 gpu=$(python -c "import torch; print('torch', torch.__version__, '|', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO GPU')" 2>/dev/null | tail -1 || echo "torch import failed")
@@ -121,12 +139,22 @@ FORCE=1 opt score_core  python -m sandesh.score
 FORCE=1 opt report_core python -m sandesh.report
 echo "CORE RESULTS READY: results/summary.md (add-on audits follow)"
 
-# --- add-on 1: stronger baselines ---------------------------------------------------
-opt eval_base_spotlight python -m sandesh.evaluate --model "$BASE" --name base_spotlight --prompt spotlight --no-harmful --no-benign --bs "$BS_GEN"
-opt guard_detect        python -m sandesh.guard --qwen "$JUDGE" --bs "$BS_GEN"
-opt eval_base_guard     python -m sandesh.evaluate --model "$BASE" --name base_guard --inbox-filter data/guard/filter_qwen3guard.jsonl --no-harmful --no-benign --bs "$BS_GEN"
+# --- round-1 add-ons, cheap and high value: capability + over-refusal, then multi-turn and best-of-N
+#     attacks on the base model and the fine-tunes. Scored as soon as they are done.
+weights_addons base             "$BASE"
+weights_addons sft_clean        ckpt/sft_clean
+weights_addons sft_sandesh      ckpt/sft_sandesh
+weights_addons safegrad_sandesh ckpt/safegrad_sandesh
+attack_addons  base             "$BASE"               base
+attack_addons  safegrad_sandesh ckpt/safegrad_sandesh base
+attack_addons  sft_sandesh      ckpt/sft_sandesh      base
+FORCE=1 opt score_round1    python -m sandesh.score
+FORCE=1 opt report_round1   python -m sandesh.report
+FORCE=1 opt explorer_round1 python -m sandesh.explorer
+FORCE=1 opt roi_round1      python -m sandesh.roi
+echo "ROUND-1 RESULTS READY: results/summary.md, results/explorer.html (heavier add-ons follow)"
 
-# --- add-on 2: CircuitKIT. Where in the network does the scam take over the action, and
+# --- add-on: CircuitKIT. Where in the network does the scam take over the action, and
 #     does zeroing those attention heads (no training) stop it? Random heads as the control.
 opt ck_env   bash scripts/setup_ck.sh
 opt ck_pairs python -m sandesh.circuit pairs --model "$BASE"
@@ -136,9 +164,12 @@ if [ -x .venv-ck/bin/python ]; then
     opt ck_discover_safegrad .venv-ck/bin/python -m sandesh.circuit discover --model ckpt/safegrad_sandesh --name safegrad_sandesh --n "$CK_N"
   fi
 fi
-opt ck_sweep_base python -m sandesh.circuit sweep --model "$BASE" --name base --bs "$BS_MT"
+# CK_SWEEP_N caps the test pairs (the files interleave languages, so any prefix is balanced); dev pairs,
+# which choose k, are fewer than that and always used in full.
+opt ck_sweep_base python -m sandesh.circuit sweep --model "$BASE" --name base --bs "$BS_MT" ${CK_SWEEP_N:+--limit "$CK_SWEEP_N"}
 if [ -e ckpt/safegrad_sandesh ]; then
-  opt ck_sweep_safegrad python -m sandesh.circuit sweep --model ckpt/safegrad_sandesh --name safegrad_sandesh --baseline-only --bs "$BS_MT"
+  opt ck_sweep_safegrad python -m sandesh.circuit sweep --model ckpt/safegrad_sandesh --name safegrad_sandesh --baseline-only \
+      --bs "$BS_MT" ${CK_SWEEP_N:+--limit "$CK_SWEEP_N"}
 fi
 opt ck_knockout      python -m sandesh.circuit knockout --model "$BASE" --out ckpt/base_knockout
 opt ck_knockout_rand python -m sandesh.circuit knockout --model "$BASE" --out ckpt/base_knockout_rand --random-seed 0
@@ -148,28 +179,18 @@ for name in base_knockout base_knockout_rand; do
   opt "cap_$name"  python -m sandesh.capability --model "ckpt/$name" --name "$name" --n "$MMLU_N" --bs "$BS_MT"
 done
 
-# --- add-on 3: is SafeGrad better than just mixing the refusals in? ----------------
+# --- add-on: stronger baselines. A spotlighting system prompt, and a guard model filtering the inbox ---
+opt eval_base_spotlight python -m sandesh.evaluate --model "$BASE" --name base_spotlight --prompt spotlight --no-harmful --no-benign --bs "$BS_GEN"
+attack_addons base_spotlight "$BASE" spotlight
+opt guard_detect        python -m sandesh.guard --qwen "$JUDGE" --bs "$BS_GEN"
+opt eval_base_guard     python -m sandesh.evaluate --model "$BASE" --name base_guard --inbox-filter data/guard/filter_qwen3guard.jsonl --no-harmful --no-benign --bs "$BS_GEN"
+
+# --- add-on: is SafeGrad better than just mixing the refusals in? ----------------
 opt curate_mix     python -m sandesh.curate --only train_mix
 opt train_sft_mix  python -m sandesh.train --method plain --data data/curated/train_mix --out ckpt/sft_mix --epochs "$EPOCHS" --bs "$BS_TRAIN"
 opt eval_sft_mix   python -m sandesh.evaluate --model ckpt/sft_mix --name sft_mix --bs "$BS_GEN"
-
-# --- add-on 4: adaptive best-of-N attack and multi-turn escalation -------------------
-for spec in "base|$BASE|base" "base_spotlight|$BASE|spotlight" "sft_sandesh|ckpt/sft_sandesh|base" \
-            "sft_mix|ckpt/sft_mix|base" "safegrad_sandesh|ckpt/safegrad_sandesh|base"; do
-  IFS='|' read -r name model prompt <<< "$spec"
-  [ -e "$model" ] || [ "$model" = "$BASE" ] || { echo "[skip] bon/mt $name: no $model"; continue; }
-  opt "bon_$name" python -m sandesh.bon run --model "$model" --name "$name" --prompt "$prompt" --bs "$BS_GEN"
-  opt "mt_$name"  python -m sandesh.multiturn --model "$model" --name "$name" --prompt "$prompt" --bs "$BS_MT"
-done
-
-# --- add-on 5: over-refusal (XSTest) and capability (Global-MMLU) per set of weights --
-for spec in "base|$BASE" "sft_clean|ckpt/sft_clean" "sft_sandesh|ckpt/sft_sandesh" "sft_mix|ckpt/sft_mix" \
-            "safegrad_sandesh|ckpt/safegrad_sandesh"; do
-  IFS='|' read -r name model <<< "$spec"
-  [ -e "$model" ] || [ "$model" = "$BASE" ] || { echo "[skip] benign/cap $name: no $model"; continue; }
-  opt "benign_$name" python -m sandesh.evaluate --model "$model" --name "$name" --splits --no-harmful --bs "$BS_GEN"
-  opt "cap_$name"    python -m sandesh.capability --model "$model" --name "$name" --n "$MMLU_N" --bs "$BS_MT"
-done
+weights_addons sft_mix ckpt/sft_mix
+attack_addons  sft_mix ckpt/sft_mix base
 
 # --- judge everything new, score, plot ----------------------------------------------
 FORCE=1 opt judge    python -m sandesh.safety judge --judge "$JUDGE" --bs "$BS_GEN"
