@@ -13,6 +13,8 @@
 # Knobs (env): SANDESH_BASE (default CohereLabs/tiny-aya-fire), BS_TRAIN (4; use 2 on a 24GB 3090),
 #              BS_GEN (32; 16 on a 3090), BS_MT (16; 8 on a 3090), EPOCHS (2), JUDGE (Qwen/Qwen3Guard-Gen-4B),
 #              BON_PER_LANG (30), BON_K (16), MT_PER_LANG (40), MMLU_N (200), CK_N (64 CircuitKIT discovery pairs)
+#              FAST=1: deadline profile (EPOCHS 1, BON_PER_LANG 8, MT_PER_LANG 20, MMLU_N 100, CK_N 32); explicit
+#              values still win. Finish early with whatever is done: bash scripts/run_all.sh judge score report explorer roi
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/env.sh
@@ -36,6 +38,10 @@ if [ -z "${NO_LOCK:-}" ]; then
 fi
 
 BASE=$SANDESH_BASE
+if [ -n "${FAST:-}" ]; then  # deadline profile: same conditions and test sets; 1 epoch, smaller add-on samples
+  EPOCHS=${EPOCHS:-1}; BON_PER_LANG=${BON_PER_LANG:-8}; MT_PER_LANG=${MT_PER_LANG:-20}
+  MMLU_N=${MMLU_N:-100}; CK_N=${CK_N:-32}
+fi
 BS_TRAIN=${BS_TRAIN:-4}
 BS_GEN=${BS_GEN:-32}
 BS_MT=${BS_MT:-16}
@@ -69,6 +75,9 @@ opt() {  # opt <name> <command...>: optional stage, a failure is logged and the 
 # whole function before running it, so a `git pull` mid-run cannot change the running script.
 main() {
 [ $# -gt 0 ] && ONLY="$*"
+echo "[$(date '+%F %T')] run_all $(git rev-parse --short HEAD 2>/dev/null || echo '?'): BASE=$BASE EPOCHS=$EPOCHS" \
+     "BS_TRAIN=$BS_TRAIN BS_GEN=$BS_GEN BS_MT=$BS_MT BON=${BON_PER_LANG}x$BON_K MT=$MT_PER_LANG MMLU_N=$MMLU_N CK_N=$CK_N" \
+     "${ONLY:+ONLY=$ONLY}"
 
 # --- data ---------------------------------------------------------------------
 stage world          python -m sandesh.world --out data

@@ -7,7 +7,8 @@ __pycache__/
 ckpt/
 data/
 runs/
-logs/
+logs/*
+!logs/.gitkeep
 .done/
 results/auditkit/
 results/scored_*.jsonl

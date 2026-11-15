@@ -15,4 +15,6 @@ export TOKENIZERS_PARALLELISM=false
 export PATH=$UV_INSTALL_DIR:$PATH
 export SANDESH_BASE=${SANDESH_BASE:-CohereLabs/tiny-aya-fire}
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-[ -f "$_here/.venv/bin/activate" ] && source "$_here/.venv/bin/activate"
+# `if` (not `[ ] && source`): on a fresh clone there is no .venv yet, and a failing last line would make
+# `source scripts/env.sh` return 1, which silently stops any script running under `set -e`.
+if [ -f "$_here/.venv/bin/activate" ]; then source "$_here/.venv/bin/activate"; fi

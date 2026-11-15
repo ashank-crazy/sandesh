@@ -4,7 +4,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/env.sh
-mkdir -p "$HF_HOME" "$UV_CACHE_DIR" "$UV_INSTALL_DIR" "$UV_PYTHON_INSTALL_DIR"
+mkdir -p "$HF_HOME" "$UV_CACHE_DIR" "$UV_INSTALL_DIR" "$UV_PYTHON_INSTALL_DIR" logs
+echo "Setting up in $PWD (caches under $NAS)"
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$UV_INSTALL_DIR" INSTALLER_NO_MODIFY_PATH=1 sh
@@ -23,6 +24,8 @@ if not ok:
 EOF
 python -m pytest -q tests
 echo
-echo "Next: hf auth login   (token is stored under $HF_HOME, i.e. inside $NAS)"
-echo "      accept the licence at https://huggingface.co/CohereLabs/tiny-aya-fire"
-echo "      then: nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &"
+echo "SETUP OK. Next:"
+echo "  1. accept the licence at https://huggingface.co/CohereLabs/tiny-aya-fire (any browser, e.g. your phone)"
+echo "  2. source scripts/env.sh && hf auth login      (paste a token from https://huggingface.co/settings/tokens;"
+echo "     it is stored under $HF_HOME, i.e. inside $NAS)"
+echo "  3. nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &     (see NEXT_STEPS.md for FAST=1 and 3090 knobs)"
