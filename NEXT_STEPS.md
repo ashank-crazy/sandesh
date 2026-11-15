@@ -77,6 +77,9 @@ CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `
 ## If a stage fails
 Every add-on is optional, so the run continues; its log is `logs/<stage>.log`. Re-run just that stage after a fix:
 `bash scripts/run_all.sh <stage>` (e.g. `ck_discover_base`). Likely trouble spots:
+- Setup says `CUDA not visible`, or `run_all.sh` stops at `NO GPU`: torch does not match the driver. Re-run
+  `bash scripts/setup_gpu.sh`; it reads the driver's CUDA version from `nvidia-smi` and takes torch from the cu126
+  index on 12.x drivers (PyPI's torch is built for CUDA 13.x). The GPU box's driver is CUDA 12.8.
 - `ck_env`: CUDA wheel mismatch in `.venv-ck` (the script copies the main venv's torch build; check `logs/ck_env.log`).
 - `ck_discover_*`: out of memory on a 3090 with long prompts. Use `CK_N=32`, or rebuild the pairs with
   `python -m sandesh.circuit pairs --model CohereLabs/tiny-aya-fire --max-tokens 1000`, then delete
