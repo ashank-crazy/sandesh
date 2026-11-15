@@ -38,18 +38,33 @@ CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `
 1. On the GPU box (first time):
    ```bash
    cd /media/NAS/ashank && git clone https://github.com/ashank-crazy/sandesh && cd sandesh
-   bash scripts/setup_gpu.sh
-   source scripts/env.sh && hf auth login        # accept licence at huggingface.co/CohereLabs/tiny-aya-fire first
-   nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &
+   bash scripts/setup_gpu.sh                    # prints a lot and ends with "SETUP OK"
+   ```
+   Hugging Face from a CLI-only box: in any browser (a phone is fine), on the same HF account, accept the licence at
+   https://huggingface.co/CohereLabs/tiny-aya-fire (auto-approved; it is the only gated repo we use) and create a
+   **Write** token at https://huggingface.co/settings/tokens (Write: `publish` uploads with it later). Then paste it
+   at the prompt (nothing shows while you paste; answer `n` to "Add token as git credential?"):
+   ```bash
+   source scripts/env.sh && hf auth login
+   hf auth whoami && hf download CohereLabs/tiny-aya-fire config.json > /dev/null && echo "Tiny Aya access OK"
+   FAST=1 BS_TRAIN=2 BS_GEN=16 BS_MT=8 nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &
    tail -f logs/run_all.log
    ```
-   On a 24GB 3090: `BS_TRAIN=2 BS_GEN=16 BS_MT=8 nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &`.
+   Drop `BS_TRAIN=2 BS_GEN=16 BS_MT=8` on the A100 (40GB). The first log line prints the settings in use.
+   **`FAST=1`** is the deadline profile: same conditions and test sets, 1 training epoch (1,200 steps at batch 2),
+   best-of-N on 8 scenarios per language (still 16 rewrites each), 20 multi-turn episodes per language, 100 MMLU
+   questions, 32 CircuitKIT pairs. Without it the run is roughly 1.5-2x longer.
    **Already running an older clone?** Let it run; `git pull` is safe mid-run. Once that run has finished, start the
    same command again: finished stages are skipped (`.done/`), new stages run. `run_all.sh` refuses to start while
    another copy is running (it would fight the first for GPU memory); `NO_LOCK=1` overrides that.
    **Early check (~30-45 min in):** when `score_baselines` finishes, paste `results/summary.md` to Claude. If base
    attack success is near 0% or "Re-reads inbox" is high, fix the prompt format before training burns GPU hours.
    "CORE RESULTS READY" in the log means the main table exists; the add-ons follow (several more hours).
+   **Out of time?** Stop the run and build the results from whatever finished (missing add-ons show as "–"):
+   ```bash
+   pkill -f scripts/run_all.sh; pkill -f "python -m sandesh"
+   bash scripts/run_all.sh judge score report explorer roi
+   ```
 2. When done, paste `results/summary.md` + `grep -h "FAILED\|warn" logs/run_all.log` back to Claude. Fill README
    "Results" and the `[fill #n]`s in `SUBMISSION.md`. If results don't support the README title ("We fixed it") or a
    claim in the abstract (e.g. the knockout beats random heads), rewrite it honestly.

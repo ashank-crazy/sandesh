@@ -19,8 +19,9 @@ import torch
 ok = torch.cuda.is_available()
 print("torch", torch.__version__, "cuda:", ok, "|", torch.cuda.get_device_name(0) if ok else "NO GPU")
 if not ok:
-    raise SystemExit("CUDA not visible. If the driver is older, reinstall torch from the matching index, e.g.\n"
-                     "  uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cu121")
+    raise SystemExit("CUDA not visible. Check `nvidia-smi` (top right: CUDA Version). If the driver is older than this\n"
+                     "torch build needs, reinstall torch from the matching index, then re-run this script, e.g. for 12.6:\n"
+                     "  uv pip install --python .venv/bin/python 'torch>=2.7' --index-url https://download.pytorch.org/whl/cu126")
 EOF
 python -m pytest -q tests
 echo
