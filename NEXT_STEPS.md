@@ -57,6 +57,13 @@ CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `
   re-reads, 98.7% valid tool calls. Restarted 18:57 IST on 1cf5772 with `BS_GEN=32 BS_MT=16` (only ~0-20% faster:
   generation is GPU-bound, not overhead-bound). `train_sft_clean` started 19:20 IST. Baseline numbers are filled
   in `SUBMISSION.md`; `⟦R1: ...⟧` markers there say what to keep depending on which add-ons finish.
+- Training times on the shared 3090 (1 epoch, 1,200 steps at batch 2): `train_sft_clean` 2h10m (19:20-21:30),
+  `train_sft_sandesh` 1h58m (21:30-23:29). `train_safegrad_sandesh` started 23:29 IST. Each SafeGrad step adds a
+  forward+backward on a shorter (~700-token) safety batch and a no-grad base pass, so expect ~1.4-1.7x plain SFT:
+  done ~02:15-03:00 IST. Then three core evals (~50-70 min each) + judge -> "CORE RESULTS READY" ~05:30-07:00;
+  round-1 add-ons (~2.5-3 h) -> "ROUND-1 RESULTS READY" ~08:00-10:00 IST. Training pads every batch to a fixed
+  length, so memory is the same at every step: if SafeGrad got past its first logged steps, it will not OOM later.
+  Progress and the trainer's own ETA: `tail -c 600 logs/train_safegrad_sandesh.log | tr '\r' '\n' | tail -2`.
 
 ### Round-1 morning checklist (Nov 16)
 1. `grep ">>>\|<<<\|FAILED\|READY" logs/run_all.log | tail -25` on the box. "ROUND-1 RESULTS READY" = round-1 add-ons
