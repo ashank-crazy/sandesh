@@ -10,8 +10,20 @@ echo "Setting up in $PWD (caches under $NAS)"
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$UV_INSTALL_DIR" INSTALLER_NO_MODIFY_PATH=1 sh
 fi
-uv venv .venv --python 3.12
-uv pip install --python .venv/bin/python -r requirements.txt
+# torch on PyPI is built for the newest CUDA (13.x), which a CUDA 12.x driver cannot run. Read the driver's CUDA
+# version and, on 12.x, take torch from the CUDA 12.6 index first (the newest torch line with a 12.x build).
+drv=$(nvidia-smi 2>/dev/null | grep -o 'CUDA Version: [0-9]*\.[0-9]*' | head -1 | grep -o '[0-9]*\.[0-9]*$' || true)
+case "$drv" in
+  12.*) TORCH_INDEX=https://download.pytorch.org/whl/cu126 ;;
+  *)    TORCH_INDEX= ;;
+esac
+echo "Driver CUDA version: ${drv:-unknown}; torch from ${TORCH_INDEX:-PyPI}"
+# Always rebuild: a venv mixing CUDA 13 and CUDA 12 libraries is not worth debugging.
+uv venv .venv --python 3.12 --clear
+if [ -n "$TORCH_INDEX" ]; then
+  uv pip install --python .venv/bin/python "torch>=2.7" --index-url "$TORCH_INDEX"
+fi
+uv pip install --python .venv/bin/python -r requirements.txt   # keeps the torch above (it satisfies torch>=2.7)
 source .venv/bin/activate
 
 python - <<'EOF'

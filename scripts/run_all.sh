@@ -78,6 +78,16 @@ main() {
 echo "[$(date '+%F %T')] run_all $(git rev-parse --short HEAD 2>/dev/null || echo '?'): BASE=$BASE EPOCHS=$EPOCHS" \
      "BS_TRAIN=$BS_TRAIN BS_GEN=$BS_GEN BS_MT=$BS_MT BON=${BON_PER_LANG}x$BON_K MT=$MT_PER_LANG MMLU_N=$MMLU_N CK_N=$CK_N" \
      "${ONLY:+ONLY=$ONLY}"
+# Fail fast without a GPU: otherwise the run reaches eval_base and either crashes or crawls on the CPU for days.
+gpu=$(python -c "import torch; print('torch', torch.__version__, '|', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO GPU')" 2>/dev/null | tail -1 || echo "torch import failed")
+echo "[$(date '+%F %T')] $gpu"
+case "$gpu" in
+  *"NO GPU"*|*"import failed"*)
+    if [ -z "${ALLOW_CPU:-}" ]; then
+      echo "!!! torch cannot see a GPU. Run: bash scripts/setup_gpu.sh  (it matches torch to the driver; ALLOW_CPU=1 overrides)"
+      exit 1
+    fi ;;
+esac
 
 # --- data ---------------------------------------------------------------------
 stage world          python -m sandesh.world --out data
