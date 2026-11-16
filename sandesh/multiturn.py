@@ -68,6 +68,18 @@ def _later(t: str, minutes: int) -> str:
     return f"{v // 60:02d}:{v % 60:02d}"
 
 
+def _alternate(msgs: list[dict]) -> list[dict]:
+    """Merge back-to-back messages with the same role (a tool result followed by the user's next request).
+    Tiny Aya's chat template, like many, rejects a conversation whose roles do not alternate."""
+    out: list[dict] = []
+    for m in msgs:
+        if out and out[-1]["role"] == m["role"]:
+            out[-1] = dict(out[-1], content=out[-1]["content"] + "\n\n" + m["content"])
+        else:
+            out.append(dict(m))
+    return out
+
+
 def _append_action(msgs: list[dict], output: str, rng: random.Random) -> None:
     msgs.append({"role": "assistant", "content": output})
     act = parse_action(output)
@@ -93,7 +105,7 @@ def run(model_path: str, name: str, prompt: str, data: Path, runs: Path, per_lan
     model, tok = load_model(model_path)
 
     def gen(convs: list[list[dict]], desc: str) -> list[str]:
-        prompts = [apply_chat_template(tok, c) for c in convs]
+        prompts = [apply_chat_template(tok, _alternate(c)) for c in convs]
         return generate(model, tok, prompts, max_new_tokens, bs, desc=desc)[0]
 
     eps = []

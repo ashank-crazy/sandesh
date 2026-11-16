@@ -85,7 +85,7 @@ weights_addons() {  # weights_addons <name> <model>: over-refusal (XSTest) and c
 attack_addons() {  # attack_addons <name> <model> <prompt>: multi-turn escalation and adaptive best-of-N
   local name=$1 model=$2 prompt=$3
   [ -e "$model" ] || [ "$model" = "$BASE" ] || { echo "[skip] mt/bon $name: no $model"; return 0; }
-  opt "mt_$name"  python -m sandesh.multiturn --model "$model" --name "$name" --prompt "$prompt" --bs "$BS_MT"
+  opt "mt_$name"  python -m sandesh.multiturn --model "$model" --name "$name" --prompt "$prompt" --per-lang "$MT_PER_LANG" --bs "$BS_MT"
   opt "bon_$name" python -m sandesh.bon run --model "$model" --name "$name" --prompt "$prompt" --bs "$BS_GEN"
 }
 # Everything runs inside main(), and the call and `exit` share one line: bash parses the
