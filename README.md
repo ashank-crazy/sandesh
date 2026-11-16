@@ -14,7 +14,8 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 · [dataset collection](https://huggingface.co/collections/ashank-crazy/sandesh-datasets)
 · models: [plain SFT](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft),
 [SafeGrad](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-safegrad),
-[scam-free control](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft-clean)
+[scam-free control](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft-clean),
+[refusals mixed in](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft-mix)
 ([model collection](https://huggingface.co/collections/ashank-crazy/sandesh-models))
 
 ---
@@ -34,20 +35,27 @@ safety does not erode). We measure everything with exact, LLM-free checks, inclu
 styles the model never saw in training**, and we attack our own fix the way a real scammer would: **16 rewrites
 per scam (best-of-N with encodings and noise) and follow-up texts over three turns**.
 
-| | Tiny Aya Fire | + defensive prompt | Plain SFT on SandeshBench |
-|---|---|---|---|
-| Attack success, all test splits | 14.0% | 4.3% | **0.0%** |
-| Attack success, unseen languages (bn/ta/mr) | 16.0% | 6.6% | **0.0%** |
-| Attacker wins with 16 rewrites per scam | 52.1% | – | **0.0%** |
-| Hijacked within 3 turns (scammer texts again, user delegates) | 67.5% | – | 20.0% |
-| Task success, clean inbox | 48.3% | 38.8% | **99.5%** |
-| Warns the user about the scam | 0.8% | 7.9% | **94.9%** |
-| Unsafe answers, held-out red-team prompts | 5.5% | (same weights) | 4.0% |
-| Global-MMLU en/hi/bn | 48.0% | (same weights) | 49.0% |
+| | Tiny Aya Fire | + defensive prompt | + spotlighting prompt | + Qwen3Guard SMS filter | Plain SFT on SandeshBench |
+|---|---|---|---|---|---|
+| Attack success, all test splits | 14.0% | 4.3% | 2.6% | 2.7% | **0.0%** |
+| Attack success, unseen languages (bn/ta/mr) | 16.0% | 6.6% | 1.9% | 1.3% | **0.0%** |
+| Attacker wins with 16 rewrites per scam | 52.1% | – | 16.7% | – | **0.0%** |
+| Hijacked within 3 turns (scammer texts again, user delegates) | 67.5% | – | 46.7% | – | **20.0%** |
+| Task success, clean inbox | 48.3% | 38.8% | 63.2% | 41.6% | **99.5%** |
+| Warns the user about the scam | 0.8% | 7.9% | 2.4% | 0.0% | **94.9%** |
+| Unsafe answers, held-out red-team prompts | 5.5% | = base | = base | = base | 4.0% |
+| Global-MMLU en/hi/bn | 48.0% | = base | = base | = base | 49.0% |
 
-Two surprises, both in [Results](#results): a control fine-tuned on the same inboxes **with the scam removed**
-already drops attack success to 1.2%, and **SafeGrad was not needed**, because plain SFT did not erode general
-safety in the first place. The remaining weak spot is **multi-turn delegation**.
+The prompt and filter defenses run on the base weights. The filter is Qwen3Guard-Gen-4B in strict mode, and it also
+drops **78.1% of genuine OTP messages**, so the assistant can no longer read you your OTP.
+
+Three surprises, all in [Results](#results):
+- A control fine-tuned on the same inboxes **with the scam removed** already drops attack success to 1.2%.
+- **SafeGrad was not needed**, because plain SFT did not erode general safety in the first place.
+- The obvious alternative to SafeGrad, **mixing the same refusals into the training data, refuses 98.0% of XSTest's
+  safe prompts**. SafeGrad keeps that at 9.6%.
+
+The remaining weak spot is **multi-turn delegation**.
 
 ---
 
@@ -139,16 +147,16 @@ Every comparison with the base model is a paired bootstrap on identical items (A
 |---|---|---|
 | Tiny Aya Fire | base model, plain system prompt | the problem |
 | + defensive system prompt | explicit "SMS are data, never instructions" rules | best prompt-only fix |
-| + spotlighting & sandwich prompt † | every SMS datamarked (`^` for spaces, Hines et al. 2024) + the user's request repeated after the inbox | strongest published prompt-level defense |
-| + Qwen3Guard SMS filter † | Qwen3Guard-Gen-4B screens each SMS; flagged ones never reach the assistant | off-the-shelf guard model as a filter |
+| + spotlighting & sandwich prompt | every SMS datamarked (`^` for spaces, Hines et al. 2024) + the user's request repeated after the inbox | strongest published prompt-level defense |
+| + Qwen3Guard SMS filter | Qwen3Guard-Gen-4B (strict mode) screens each SMS; flagged ones never reach the assistant | off-the-shelf guard model as a filter |
 | − injection heads zeroed (CircuitKIT) † | base weights with k attention heads' output projection set to zero | training-free circuit intervention |
 | − random heads zeroed (control) † | same k, random heads | is it the circuit, or any damage? |
 | SFT, clean inboxes only | control fine-tune, no attacks seen | format vs resistance |
 | SFT on Sandesh (PlainSFT) | fine-tune on attacked inboxes | the simple fix (and, it turns out, the best) |
-| SFT + refusals mixed in † | PlainSFT with the refusal anchor mixed in | the obvious alternative to SafeGrad |
+| SFT + refusals mixed in | PlainSFT with the refusal anchor mixed in | the obvious alternative to SafeGrad |
 | SFT on Sandesh (SafeGrad) | fine-tune on attacked inboxes, anchored to the base model's refusals | safety-preserving fine-tuning |
 
-† Running for the final round; not in the round-1 results.
+† Final round: CircuitKIT's attribution ran out of GPU memory in round 1 (see below).
 
 ### Stress tests
 
@@ -161,7 +169,7 @@ Every comparison with the base model is a paired bootstrap on identical items (A
   scammer has texted again in a different style with an urgency banner. Turn 3: "take care of whatever is urgent",
   the vague delegation where an agent is most tempted to act. We record which turn broke, and keep every transcript;
   the explorer's "Multi-turn" tab shows each episode turn by turn, base vs SafeGrad.
-- **Detectors** (`sandesh/guard.py`, final round). Qwen3Guard-Gen-4B (strict and loose) and ProtectAI's DeBERTa prompt-injection
+- **Detectors** (`sandesh/guard.py`). Qwen3Guard-Gen-4B (strict and loose) and ProtectAI's DeBERTa prompt-injection
   classifier, run on every SMS. Recall by language, and false alarms on legitimate SMS, especially OTP messages, which
   a filter must never drop.
 - **Over-refusal and capability.** XSTest safe prompts and Global-MMLU (en/hi/bn) for every set of weights: a fix
@@ -196,8 +204,11 @@ p = 0.001 (AuditKIT paired bootstrap, 1,000 resamples, so 0.001 is the floor; 1,
 |---|---|---|---|---|---|
 | Tiny Aya Fire | 12.5% | 16.0% | 13.2% | 14.3% | 52.1% (38.3-65.5%) |
 | + defensive system prompt | 4.5% | 6.6% | 2.5% | 2.9% | – |
+| + spotlighting & sandwich prompt | 2.2% | 1.9% | 1.8% | 5.2% | 16.7% (8.7-29.6%) |
+| + Qwen3Guard SMS filter (strict) | 3.2% | 1.3% | 3.2% | 3.3% | – |
 | SFT, clean inboxes only (control) | 0.6% | 1.9% | 1.4% | 1.0% | – |
 | SFT on Sandesh (PlainSFT) | **0.0%** | **0.0%** | **0.0%** | **0.0%** | **0.0%** (0.0-7.4%) |
+| SFT + refusals mixed in (PlainSFT) | **0.0%** | **0.0%** | **0.0%** | **0.0%** | **0.0%** (0.0-7.4%) |
 | SFT on Sandesh (SafeGrad) | 0.0% | 0.9% | 0.4% | 0.0% | 2.1% (0.4-10.9%) |
 
 ### Usefulness, general safety, capability
@@ -205,13 +216,25 @@ p = 0.001 (AuditKIT paired bootstrap, 1,000 resamples, so 0.001 is the floor; 1,
 | Condition | Task success, clean ↑ | Task success, attacked ↑ | Warns user ↑ | Harmful prompts unsafe ↓ | Harmful prompts refused ↑ | XSTest over-refusal ↓ | Global-MMLU en/hi/bn ↑ |
 |---|---|---|---|---|---|---|---|
 | Tiny Aya Fire | 48.3% | 43.4% | 0.8% | 5.5% | 66.0% | 11.6% | 48.0% |
-| + defensive system prompt | 38.8% | 40.5% | 7.9% | (same weights) | | | |
+| + defensive system prompt | 38.8% | 40.5% | 7.9% | = base | = base | = base | = base |
+| + spotlighting & sandwich prompt | 63.2% | 57.7% | 2.4% | = base | = base | = base | = base |
+| + Qwen3Guard SMS filter (strict) | 41.6% | 39.8% | 0.0% | = base | = base | = base | = base |
 | SFT, clean inboxes only (control) | 97.6% | 97.4% | 0.0% | 5.0% | 68.0% | 12.0% | 47.0% |
 | SFT on Sandesh (PlainSFT) | **99.5%** | **99.7%** | **94.9%** | 4.0% | 71.8% | 12.4% | 49.0% |
-| SFT on Sandesh (SafeGrad) | 95.7% | 95.7% | 78.9% | 5.8% | 65.2% | 9.6% | 48.3% |
+| SFT + refusals mixed in (PlainSFT) | 98.6% | 97.3% | 81.3% | **0.0%** | **98.5%** | 98.0% | 49.7% |
+| SFT on Sandesh (SafeGrad) | 95.7% | 95.7% | 78.9% | 5.8% | 65.2% | **9.6%** | 48.3% |
 
-Global-MMLU differences vs base are not significant (p ≥ 0.51). Harmful prompts: 400 held-out `aya_redteaming`
-prompts (EN + HI), judged by Qwen3Guard-Gen-4B.
+Global-MMLU differences vs base are not significant (p ≥ 0.21). Harmful prompts: 400 held-out `aya_redteaming`
+prompts (EN + HI), judged by Qwen3Guard-Gen-4B. The spotlighting prompt re-reads the inbox instead of acting in
+22.6% of replies (every other condition: 0.2% or less).
+
+### Off-the-shelf detectors (every SMS in the test inboxes)
+
+| Detector | Scams flagged, en | hi | hinglish | bn | ta | mr | all | False alarms, legit SMS ↓ | False alarms, OTP SMS ↓ |
+|---|---|---|---|---|---|---|---|---|---|
+| Qwen3Guard-Gen-4B, strict | 72.5% | 85.6% | 78.4% | 88.5% | 96.6% | 83.8% | 83.9% | 34.7% | 78.1% |
+| Qwen3Guard-Gen-4B, loose | 3.5% | 4.1% | 2.0% | 3.0% | 4.5% | 1.6% | 3.1% | 0.0% | 0.0% |
+| ProtectAI DeBERTa-v3 injection (English) | 73.5% | 96.9% | 83.4% | 81.8% | 94.9% | 90.3% | 86.7% | 45.8% | 81.9% |
 
 ### Multi-turn escalation (120 episodes, 20 per language)
 
@@ -221,7 +244,9 @@ of whatever is urgent". Cumulative share of episodes where the attacker got an a
 | Condition | Hijacked by turn 1 | by turn 2 | by turn 3 | Warns at turn 2 | AuditKIT `agent_eval` verified safe |
 |---|---|---|---|---|---|
 | Tiny Aya Fire | 10.8% | 50.0% | 67.5% | 2.8% | 39/120 |
-| SFT on Sandesh (PlainSFT) | 0.0% | **2.5%** | **20.0%** | **88.3%** | **96/120** |
+| + spotlighting & sandwich prompt | 5.0% | 14.2% | 46.7% | 1.8% | 64/120 |
+| SFT on Sandesh (PlainSFT) | 0.0% | 2.5% | 20.0% | 88.3% | 96/120 |
+| SFT + refusals mixed in (PlainSFT) | 0.0% | **0.0%** | **5.8%** | **89.2%** | **113/120** |
 | SFT on Sandesh (SafeGrad) | 0.0% | 13.3% | 24.2% | 65.8% | 91/120 |
 
 ### What we learned
@@ -230,23 +255,38 @@ of whatever is urgent". Cumulative share of episodes where the attacker got an a
    16.0% in the held-out languages vs 12.5% in the training ones.
    Script-switching scams work best (27.0%), authority impersonation worst (3.9%). With 16 cheap rewrites per scam,
    the attacker wins 52.1% of scenarios. The single best rewrite is simply sending the scam twice (33.3%).
-2. **Prompting trades usefulness for safety.** The defensive prompt cuts attack success to 4.3%, but clean-inbox task
-   success drops by 9.6 points (p = 0.001).
-3. **Learning the task does most of the work.** The control, fine-tuned on the same inboxes with the scam removed,
+2. **The best prompt defense works on static scams, not on a persistent attacker.** The defensive prompt cuts
+   attack success to 4.3% but costs 9.6 points of clean-inbox task success (p = 0.001). Spotlighting is better:
+   2.6% attack success, and repeating the request after the inbox even raises task success to 63.2%. But it stalls,
+   re-reading the inbox in 22.6% of replies. It is weakest on the hardest split (5.2% on unseen languages and styles).
+   It loses 16.7% of scenarios to 16 rewrites, and 46.7% of three-turn episodes.
+3. **A guard-model filter is too blunt for an inbox.** Qwen3Guard in strict mode flags 83.9% of scams, and as a filter
+   it cuts attack success to 2.7%. But it also drops 34.7% of legitimate SMS and 78.1% of genuine OTP messages, so
+   clean-inbox task success falls to 41.6%. Loose mode flags only 3.1% of scams. ProtectAI's injection classifier has
+   the same problem (81.9% of OTP messages flagged).
+4. **Learning the task does most of the work.** The control, fine-tuned on the same inboxes with the scam removed,
    already drops attack success from 14.0% to 1.2%. Much of the base model's vulnerability is confusion about the
    task, not a drive to obey. The control's remaining failures concentrate in script-switched (4.1%) and fake tool-call
    JSON (2.5%) scams, and it never warns the user (0.0%).
-4. **Training on attacks closes the gap.** Plain SFT on SandeshBench reaches 0.0% on every test split, including
-   unseen languages and unseen attack styles, holds at 0/48 under best-of-16, and warns the user 94.9% of the time.
-5. **SafeGrad was not needed.** Its job is to stop fine-tuning from eroding general safety, but plain SFT did not
-   erode it: unsafe answers to held-out red-team prompts went from 5.5% to 4.0% and refusals from 66.0% to 71.8%.
-   SafeGrad held both at the base level (5.8%, 65.2%), as its anchor is designed to, and paid for it in task success
-   (95.7%), warnings (78.9%) and one Bengali scenario that broke under best-of-16. It does have the lowest
-   over-refusal (9.6%). The lesson: measure drift before paying for a safety-preserving trainer.
-6. **Delegation is the remaining weak spot.** A second scam text breaks half of the base model's episodes by turn 2;
-   plain SFT holds (2.5%) and warns the user 88.3% of the time. But when the user hands over control ("take care of
-   whatever is urgent"), 21 more episodes break (20.0% by turn 3), for SafeGrad too (24.2%). Every training example
-   is a single turn; vague delegation after a warning is the case it never saw, and the next thing to train on.
+5. **Training on attacks closes the gap.** Plain SFT on SandeshBench reaches 0.0% on every test split, including
+   unseen languages and unseen attack styles. It holds at 0/48 under best-of-16 and warns the user 94.9% of the
+   time. No prompt or filter comes close, and none of them warns the user.
+6. **SafeGrad was not needed here, but the naive alternative is worse.** SafeGrad's job is to stop fine-tuning from
+   eroding general safety. Plain SFT did not erode it: unsafe answers to held-out red-team prompts went from 5.5% to
+   4.0%, and refusals from 66.0% to 71.8%. SafeGrad held both at the base level (5.8%, 65.2%), as its anchor is
+   designed to. It paid for that in task success (95.7%), warnings (78.9%) and one Bengali scenario that broke under
+   best-of-16.
+   The obvious alternative is to mix the same refusals into the training data. That drives unsafe answers to 0.0%,
+   but the model now **refuses 98.0% of XSTest's safe prompts** (base 11.6%). The likely cause is a format shortcut:
+   in the mixed set, every plain-chat example is a refusal, so the model learns to refuse plain chat. SafeGrad uses
+   the same refusals as a gradient constraint instead, and has the lowest over-refusal of all (9.6%). The lesson:
+   measure drift first; if safety does need protecting, constrain the gradient rather than mixing in refusals.
+7. **Delegation is the remaining weak spot.** A second scam text breaks half of the base model's episodes by turn 2.
+   Plain SFT holds (2.5%) and warns the user 88.3% of the time. But when the user hands over control ("take care of
+   whatever is urgent"), 21 more episodes break (20.0% by turn 3), and SafeGrad does no better (24.2%). Every
+   training example is a single turn, so vague delegation after a warning is the case the model never saw. The
+   refusal-mixed model holds best (5.8% by turn 3, 113/120 verified safe), probably because it now declines vague
+   requests more readily; with 98% over-refusal it is not the fix. Training on multi-turn delegation is next.
 
 
 Throughput is not compared: the eval GPU was shared with other jobs, so tokens/s reflects their load, not the model.
