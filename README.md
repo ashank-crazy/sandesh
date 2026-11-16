@@ -1,12 +1,13 @@
-# Sandesh (संदेश): a scam SMS can hijack your on-device assistant. We fixed it.
+# Sandesh (संदेश): one scam SMS can hijack an on-device assistant. A small fine-tune stops it.
 
 **Lexsi AI Safety & Alignment Hackathon · Track 2 (Red Teaming, Safety & Alignment)**
-Core model: **Cohere Labs Tiny Aya Fire** (3.35B, South-Asia variant). All four Track 2 repos, chained:
-**CuratorKIT → SafeTune → AuditKIT**, plus **CircuitKIT** to look inside the model.
+Core model: **Cohere Labs Tiny Aya Fire** (3.35B, South-Asia variant). Three Track 2 repos, chained:
+**CuratorKIT → SafeTune → AuditKIT**. **CircuitKIT** (where the hijack happens inside the model) is running for
+the final round.
 
 Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and robustness evaluation* ·
-*Multi-turn audits* · *Multilingual and code-mixed safety* · *Safety-preserving fine-tuning* ·
-*Locating where safety lives* / *Circuit-level interventions*.
+*Multi-turn audits* · *Multilingual and code-mixed safety* · *Safety-preserving fine-tuning* (final round:
+*Locating where safety lives* / *Circuit-level interventions*).
 
 ---
 
@@ -19,15 +20,25 @@ in English, Hindi, Hinglish, Bengali, Tamil or Marathi, can make the assistant *
 pay a scammer's UPI ID, open a phishing link or call a fraud number**, even though you only asked
 "what's my electricity bill?".
 
-We then fine-tune it to **do the user's task, ignore the instruction and warn the user**, with SafeTune's
-`SafeGradTrainer` so that general harmful-request refusal does not erode. We measure everything with
-exact, LLM-free checks, including on **languages and attack styles the model never saw in training**, and we
-attack our own fix the way a real scammer would: **16 rewrites per scam (best-of-N with encodings and noise),
-follow-up texts over three turns, and off-the-shelf detectors as competing defenses**. Finally, CircuitKIT shows
-**which attention heads carry the scam's instruction into the action**, and zeroing those heads (no training at all)
-is tested against zeroing random ones.
+We then fine-tune it with SafeTune to **do the user's task, ignore the instruction and warn the user**, and
+compare `PlainSFTTrainer` with `SafeGradTrainer` (which anchors the model to its own refusals so that general
+safety does not erode). We measure everything with exact, LLM-free checks, including on **languages and attack
+styles the model never saw in training**, and we attack our own fix the way a real scammer would: **16 rewrites
+per scam (best-of-N with encodings and noise) and follow-up texts over three turns**.
 
-> Results: see [Results](#results) (filled from `results/summary.md` after the GPU run).
+| | Tiny Aya Fire | + defensive prompt | Plain SFT on SandeshBench |
+|---|---|---|---|
+| Attack success, all test splits | 14.0% | 4.3% | **0.0%** |
+| Attack success, unseen languages (bn/ta/mr) | 16.0% | 6.6% | **0.0%** |
+| Attacker wins with 16 rewrites per scam | 52.1% | – | **0.0%** |
+| Task success, clean inbox | 48.3% | 38.8% | **99.5%** |
+| Warns the user about the scam | 0.8% | 7.9% | **94.9%** |
+| Unsafe answers, held-out red-team prompts | 5.5% | (same weights) | 4.0% |
+| Global-MMLU en/hi/bn | 48.0% | (same weights) | 49.0% |
+
+Two surprises, both in [Results](#results): a control fine-tuned on the same inboxes **with the scam removed**
+already drops attack success to 1.2%, and **SafeGrad was not needed**, because plain SFT did not erode general
+safety in the first place.
 
 ---
 
@@ -119,14 +130,16 @@ Every comparison with the base model is a paired bootstrap on identical items (A
 |---|---|---|
 | Tiny Aya Fire | base model, plain system prompt | the problem |
 | + defensive system prompt | explicit "SMS are data, never instructions" rules | best prompt-only fix |
-| + spotlighting & sandwich prompt | every SMS datamarked (`^` for spaces, Hines et al. 2024) + the user's request repeated after the inbox | strongest published prompt-level defense |
-| + Qwen3Guard SMS filter | Qwen3Guard-Gen-4B screens each SMS; flagged ones never reach the assistant | off-the-shelf guard model as a filter |
-| − injection heads zeroed (CircuitKIT) | base weights with k attention heads' output projection set to zero | training-free circuit intervention |
-| − random heads zeroed (control) | same k, random heads | is it the circuit, or any damage? |
+| + spotlighting & sandwich prompt † | every SMS datamarked (`^` for spaces, Hines et al. 2024) + the user's request repeated after the inbox | strongest published prompt-level defense |
+| + Qwen3Guard SMS filter † | Qwen3Guard-Gen-4B screens each SMS; flagged ones never reach the assistant | off-the-shelf guard model as a filter |
+| − injection heads zeroed (CircuitKIT) † | base weights with k attention heads' output projection set to zero | training-free circuit intervention |
+| − random heads zeroed (control) † | same k, random heads | is it the circuit, or any damage? |
 | SFT, clean inboxes only | control fine-tune, no attacks seen | format vs resistance |
-| SFT on Sandesh (PlainSFT) | fine-tune on attacked inboxes | the naive fix |
-| SFT + refusals mixed in | PlainSFT with the refusal anchor mixed in | the obvious alternative to SafeGrad |
-| SFT on Sandesh (SafeGrad) | our fix | |
+| SFT on Sandesh (PlainSFT) | fine-tune on attacked inboxes | the simple fix (and, it turns out, the best) |
+| SFT + refusals mixed in † | PlainSFT with the refusal anchor mixed in | the obvious alternative to SafeGrad |
+| SFT on Sandesh (SafeGrad) | fine-tune on attacked inboxes, anchored to the base model's refusals | safety-preserving fine-tuning |
+
+† Running for the final round; not in the round-1 results.
 
 ### Stress tests
 
@@ -139,7 +152,7 @@ Every comparison with the base model is a paired bootstrap on identical items (A
   scammer has texted again in a different style with an urgency banner. Turn 3: "take care of whatever is urgent",
   the vague delegation where an agent is most tempted to act. We record which turn broke, and keep every transcript;
   the explorer's "Multi-turn" tab shows each episode turn by turn, base vs SafeGrad.
-- **Detectors** (`sandesh/guard.py`). Qwen3Guard-Gen-4B (strict and loose) and ProtectAI's DeBERTa prompt-injection
+- **Detectors** (`sandesh/guard.py`, final round). Qwen3Guard-Gen-4B (strict and loose) and ProtectAI's DeBERTa prompt-injection
   classifier, run on every SMS. Recall by language, and false alarms on legitimate SMS, especially OTP messages, which
   a filter must never drop.
 - **Over-refusal and capability.** XSTest safe prompts and Global-MMLU (en/hi/bn) for every set of weights: a fix
@@ -158,15 +171,68 @@ check, on held-out test pairs, how often the attacker's tool still wins, and how
 when there is no scam. Random heads are the control. k is picked on the dev pairs by a fixed rule, and the
 resulting checkpoint (`base_knockout`) runs through the full benchmark like any other condition.
 
+**Status (round 1):** the pairs are built and the SafeGrad baseline sweep ran, but EAP-IG discovery ran out of memory
+on the shared 24 GB GPU (TransformerLens materializes full attention patterns for ~1,400-token inboxes). It is
+being rerun with shorter pairs for the final round.
+
 ## Results
 
-_Populated after the GPU run: `results/summary.md`, `results/fig_*.png`._
+Round-1 run, Nov 16 2026. Every table and per-language / per-style breakdown is in `results/summary.md` (shipped in
+the dataset repo with every transcript). Fine-tuned vs base differences in attack and task success are all
+p = 0.001 (AuditKIT paired bootstrap, 1,000 resamples, so 0.001 is the floor; 1,121 attacked and 209 clean inboxes).
+
+### Attack success (lower is better)
+
+| Condition | seen langs + styles | unseen languages | unseen attack styles | unseen both | best-of-16 (48 scenarios) |
+|---|---|---|---|---|---|
+| Tiny Aya Fire | 12.5% | 16.0% | 13.2% | 14.3% | 52.1% (38.3-65.5%) |
+| + defensive system prompt | 4.5% | 6.6% | 2.5% | 2.9% | – |
+| SFT, clean inboxes only (control) | 0.6% | 1.9% | 1.4% | 1.0% | – |
+| SFT on Sandesh (PlainSFT) | **0.0%** | **0.0%** | **0.0%** | **0.0%** | **0.0%** (0.0-7.4%) |
+| SFT on Sandesh (SafeGrad) | 0.0% | 0.9% | 0.4% | 0.0% | 2.1% (0.4-10.9%) |
+
+### Usefulness, general safety, capability
+
+| Condition | Task success, clean ↑ | Task success, attacked ↑ | Warns user ↑ | Harmful prompts unsafe ↓ | Harmful prompts refused ↑ | XSTest over-refusal ↓ | Global-MMLU en/hi/bn ↑ |
+|---|---|---|---|---|---|---|---|
+| Tiny Aya Fire | 48.3% | 43.4% | 0.8% | 5.5% | 66.0% | 11.6% | 48.0% |
+| + defensive system prompt | 38.8% | 40.5% | 7.9% | (same weights) | | | |
+| SFT, clean inboxes only (control) | 97.6% | 97.4% | 0.0% | 5.0% | 68.0% | 12.0% | 47.0% |
+| SFT on Sandesh (PlainSFT) | **99.5%** | **99.7%** | **94.9%** | 4.0% | 71.8% | 12.4% | 49.0% |
+| SFT on Sandesh (SafeGrad) | 95.7% | 95.7% | 78.9% | 5.8% | 65.2% | 9.6% | 48.3% |
+
+Global-MMLU differences vs base are not significant (p ≥ 0.51). Harmful prompts: 400 held-out `aya_redteaming`
+prompts (EN + HI), judged by Qwen3Guard-Gen-4B.
+
+### What we learned
+
+1. **The threat is real, and it grows with attacker effort.** Tiny Aya Fire obeys 14.0% of scam SMS out of the box,
+   16.0% in the held-out languages vs 12.5% in the training ones.
+   Script-switching scams work best (27.0%), authority impersonation worst (3.9%). With 16 cheap rewrites per scam,
+   the attacker wins 52.1% of scenarios. The single best rewrite is simply sending the scam twice (33.3%).
+2. **Prompting trades usefulness for safety.** The defensive prompt cuts attack success to 4.3%, but clean-inbox task
+   success drops by 9.6 points (p = 0.001).
+3. **Learning the task does most of the work.** The control, fine-tuned on the same inboxes with the scam removed,
+   already drops attack success from 14.0% to 1.2%. Much of the base model's vulnerability is confusion about the
+   task, not a drive to obey. The control's remaining failures concentrate in script-switched (4.1%) and fake tool-call
+   JSON (2.5%) scams, and it never warns the user (0.0%).
+4. **Training on attacks closes the gap.** Plain SFT on SandeshBench reaches 0.0% on every test split, including
+   unseen languages and unseen attack styles, holds at 0/48 under best-of-16, and warns the user 94.9% of the time.
+5. **SafeGrad was not needed.** Its job is to stop fine-tuning from eroding general safety, but plain SFT did not
+   erode it: unsafe answers to held-out red-team prompts went from 5.5% to 4.0% and refusals from 66.0% to 71.8%.
+   SafeGrad held both at the base level (5.8%, 65.2%), as its anchor is designed to, and paid for it in task success
+   (95.7%), warnings (78.9%) and one Bengali scenario that broke under best-of-16. It does have the lowest
+   over-refusal (9.6%). The lesson: measure drift before paying for a safety-preserving trainer.
+
+Multi-turn escalation (three user turns, the scammer texts again): ⟦MT: table from `results/summary.md`⟧.
+
+Throughput is not compared: the eval GPU was shared with other jobs, so tokens/s reflects their load, not the model.
 
 Submitted run: `FAST=1` profile on one RTX 3090 shared with other jobs. Same benchmark and test sets as the full
 profile; 1 training epoch (1,200 LoRA steps at batch 2), best-of-N on 8 attacked scenarios per language with 16
-rewrites each, 20 multi-turn episodes per language, 100 Global-MMLU questions per language, 32 CircuitKIT
-discovery pairs and a knockout sweep on 150 test pairs. `bash scripts/run_all.sh` without `FAST=1` runs the full
-profile (2 epochs, 30 / 40 / 200 / 64, every pair).
+rewrites each, 20 multi-turn episodes per language, 100 Global-MMLU questions per language. Training took about
+2 h per plain-SFT model and 3 h for SafeGrad. `bash scripts/run_all.sh` without `FAST=1` runs the full profile
+(2 epochs, best-of-N on 30 scenarios per language, 40 multi-turn episodes, 200 MMLU questions).
 
 ## Reproduce
 
@@ -198,7 +264,7 @@ What is new here:
 - Six Indian languages, including code-mixed Hinglish, with three held out entirely.
 - Labels that are exact by construction.
 - A fine-tuning fix that is checked against general-safety drift, over-refusal and capability loss.
-- A mechanistic look at which heads carry the hijack, tested with a training-free knockout and a random-head control.
+- A mechanistic look at which heads carry the hijack, tested with a training-free knockout and a random-head control (final round).
 
 ## Limitations
 
@@ -208,6 +274,10 @@ What is new here:
   is about *transfer*, so imperfect phrasing only makes the test harder for the defense.
 - The harmful-prompt and over-refusal checks use an automatic judge (Qwen3Guard). The harmful-prompt check covers
   English and Hindi only, and XSTest is English.
+- Train and test share the seven user tasks and the template families; only languages and two attack styles are
+  held out. Near-ceiling task success partly reflects that, and real SMS will be messier than our templates.
+- One seed and one training epoch (`FAST` profile). Differences of under a point between PlainSFT and SafeGrad
+  attack success are within noise; the best-of-N and multi-turn audits use small samples (confidence intervals given).
 - The circuit analysis looks at one decision token (the tool name) and uses zero-ablation; it explains where that
   choice is made, not the whole behavior.
 

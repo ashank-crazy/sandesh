@@ -65,6 +65,18 @@ CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `
   length, so memory is the same at every step: if SafeGrad got past its first logged steps, it will not OOM later.
   Progress and the trainer's own ETA: `tail -c 600 logs/train_safegrad_sandesh.log | tr '\r' '\n' | tail -2`.
 
+### Round-1 status (Nov 16, ~08:00 IST)
+- Core + round-1 add-ons finished 07:11 IST. PlainSFT: 0.0% attack success on every split, 0/48 under best-of-16,
+  99.5% clean task success, 94.9% warnings, no general-safety or MMLU loss. SafeGrad: 0.4%, 2.1% best-of-16, 95.7%
+  task success, 78.9% warnings. Scam-free control: 1.2%. README Results and `SUBMISSION.md` are rewritten around
+  this (plain SFT is the headline, SafeGrad an honest "not needed here").
+- All three `mt_*` stages failed: Tiny Aya's chat template rejects two user messages in a row (tool result + the
+  user's follow-up). Fixed in 29ee3d0 (merge same-role neighbours); run_all restarted to redo them first.
+  When they finish: fill the `⟦MT⟧` markers in README and `SUBMISSION.md` from the "Multi-turn escalation" table.
+- CircuitKIT discovery OOMed on the shared 3090 (TransformerLens attention patterns for ~1,400-token pairs need
+  >18 GB). Final-round fix: shorter pairs (`pairs --max-tokens`), or the A100. Sweep/knockout failed only because
+  discovery produced no scores.
+
 ### Round-1 morning checklist (Nov 16)
 1. `grep ">>>\|<<<\|FAILED\|READY" logs/run_all.log | tail -25` on the box. "ROUND-1 RESULTS READY" = round-1 add-ons
    scored. If it is not there by ~12:00 IST, run the CPU-only results command above (the run keeps going).
