@@ -2,7 +2,7 @@
 
 Numbers are from the round-1 run (`results/summary.md`, Nov 16 07:11 IST). Still open: `⟦MT⟧` = the
 "by turn 3" column of the "Multi-turn escalation" table in `results/summary.md` once the `mt_*` stages finish, and the
-four links after `python -m sandesh.publish`.
+model collection link (printed at the end of `logs/publish.log` once the model upload finishes).
 
 **Project:** Sandesh (संदेश): stopping scam-SMS prompt injection in an on-device multilingual assistant
 
@@ -34,8 +34,9 @@ broke, reproducible transcripts) · Multilingual and code-mixed safety · Safety
 - GitHub: https://github.com/ashank-crazy/sandesh
 - Write-up: https://github.com/ashank-crazy/sandesh#readme
 - HF model collection: [fill]
-- HF dataset collection: [fill]
-- Demo (transcript explorer Space): [fill]
+- HF dataset collection: https://huggingface.co/collections/ashank-crazy/sandesh-datasets-6afa6730d80aa334ca3be4f6
+  (dataset: https://huggingface.co/datasets/ashank-crazy/sandesh-bench)
+- Demo (transcript explorer Space): https://huggingface.co/spaces/ashank-crazy/sandesh-explorer
 
 ---
 

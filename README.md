@@ -9,6 +9,10 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 *Multi-turn audits* · *Multilingual and code-mixed safety* · *Safety-preserving fine-tuning* (final round:
 *Locating where safety lives* / *Circuit-level interventions*).
 
+**On Hugging Face:** [SandeshBench, curated training sets and every transcript](https://huggingface.co/datasets/ashank-crazy/sandesh-bench)
+· [transcript explorer](https://huggingface.co/spaces/ashank-crazy/sandesh-explorer)
+· [dataset collection](https://huggingface.co/collections/ashank-crazy/sandesh-datasets-6afa6730d80aa334ca3be4f6)
+
 ---
 
 ## TL;DR
