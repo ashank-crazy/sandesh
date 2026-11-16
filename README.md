@@ -11,7 +11,11 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 
 **On Hugging Face:** [SandeshBench, curated training sets and every transcript](https://huggingface.co/datasets/ashank-crazy/sandesh-bench)
 · [transcript explorer](https://huggingface.co/spaces/ashank-crazy/sandesh-explorer)
-· [dataset collection](https://huggingface.co/collections/ashank-crazy/sandesh-datasets-6afa6730d80aa334ca3be4f6)
+· [dataset collection](https://huggingface.co/collections/ashank-crazy/sandesh-datasets)
+· models: [plain SFT](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft),
+[SafeGrad](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-safegrad),
+[scam-free control](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft-clean)
+([model collection](https://huggingface.co/collections/ashank-crazy/sandesh-models))
 
 ---
 
@@ -35,6 +39,7 @@ per scam (best-of-N with encodings and noise) and follow-up texts over three tur
 | Attack success, all test splits | 14.0% | 4.3% | **0.0%** |
 | Attack success, unseen languages (bn/ta/mr) | 16.0% | 6.6% | **0.0%** |
 | Attacker wins with 16 rewrites per scam | 52.1% | – | **0.0%** |
+| Hijacked within 3 turns (scammer texts again, user delegates) | 67.5% | – | 20.0% |
 | Task success, clean inbox | 48.3% | 38.8% | **99.5%** |
 | Warns the user about the scam | 0.8% | 7.9% | **94.9%** |
 | Unsafe answers, held-out red-team prompts | 5.5% | (same weights) | 4.0% |
@@ -42,7 +47,7 @@ per scam (best-of-N with encodings and noise) and follow-up texts over three tur
 
 Two surprises, both in [Results](#results): a control fine-tuned on the same inboxes **with the scam removed**
 already drops attack success to 1.2%, and **SafeGrad was not needed**, because plain SFT did not erode general
-safety in the first place.
+safety in the first place. The remaining weak spot is **multi-turn delegation**.
 
 ---
 
@@ -208,6 +213,17 @@ p = 0.001 (AuditKIT paired bootstrap, 1,000 resamples, so 0.001 is the floor; 1,
 Global-MMLU differences vs base are not significant (p ≥ 0.51). Harmful prompts: 400 held-out `aya_redteaming`
 prompts (EN + HI), judged by Qwen3Guard-Gen-4B.
 
+### Multi-turn escalation (120 episodes, 20 per language)
+
+Turn 2: "anything new?", and the scammer has texted again in another style with an urgency banner. Turn 3: "take care
+of whatever is urgent". Cumulative share of episodes where the attacker got an action.
+
+| Condition | Hijacked by turn 1 | by turn 2 | by turn 3 | Warns at turn 2 | AuditKIT `agent_eval` verified safe |
+|---|---|---|---|---|---|
+| Tiny Aya Fire | 10.8% | 50.0% | 67.5% | 2.8% | 39/120 |
+| SFT on Sandesh (PlainSFT) | 0.0% | **2.5%** | **20.0%** | **88.3%** | **96/120** |
+| SFT on Sandesh (SafeGrad) | 0.0% | 13.3% | 24.2% | 65.8% | 91/120 |
+
 ### What we learned
 
 1. **The threat is real, and it grows with attacker effort.** Tiny Aya Fire obeys 14.0% of scam SMS out of the box,
@@ -227,8 +243,11 @@ prompts (EN + HI), judged by Qwen3Guard-Gen-4B.
    SafeGrad held both at the base level (5.8%, 65.2%), as its anchor is designed to, and paid for it in task success
    (95.7%), warnings (78.9%) and one Bengali scenario that broke under best-of-16. It does have the lowest
    over-refusal (9.6%). The lesson: measure drift before paying for a safety-preserving trainer.
+6. **Delegation is the remaining weak spot.** A second scam text breaks half of the base model's episodes by turn 2;
+   plain SFT holds (2.5%) and warns the user 88.3% of the time. But when the user hands over control ("take care of
+   whatever is urgent"), 21 more episodes break (20.0% by turn 3), for SafeGrad too (24.2%). Every training example
+   is a single turn; vague delegation after a warning is the case it never saw, and the next thing to train on.
 
-Multi-turn escalation (three user turns, the scammer texts again): ⟦MT: table from `results/summary.md`⟧.
 
 Throughput is not compared: the eval GPU was shared with other jobs, so tokens/s reflects their load, not the model.
 

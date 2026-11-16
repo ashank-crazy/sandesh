@@ -77,6 +77,14 @@ CircuitKIT (all four Track 2 repos). Problem statements are listed by title in `
   >18 GB). Final-round fix: shorter pairs (`pairs --max-tokens`), or the A100. Sweep/knockout failed only because
   discovery produced no scores.
 
+### Round 1 done (Nov 16, ~09:00 IST)
+- Multi-turn (fixed): hijacked by turn 3 base 67.5%, PlainSFT 20.0%, SafeGrad 24.2% (PlainSFT 2.5% by turn 2,
+  warns 88.3%). Delegation at turn 3 is the weak spot: training data is single-turn.
+- Published and checked public, un-gated: models collection https://huggingface.co/collections/ashank-crazy/sandesh-models
+  (sft, safegrad, sft-clean), datasets collection .../sandesh-datasets, Space sandesh-explorer. Tag `round1`.
+- Final round (video/slides due Nov 22 AoE): CircuitKIT discovery without the OOM (shorter pairs or the A100),
+  spotlight/guard/sft_mix results (run_all is producing them), and a multi-turn training set for delegation.
+
 ### Round-1 morning checklist (Nov 16)
 1. `grep ">>>\|<<<\|FAILED\|READY" logs/run_all.log | tail -25` on the box. "ROUND-1 RESULTS READY" = round-1 add-ons
    scored. If it is not there by ~12:00 IST, run the CPU-only results command above (the run keeps going).
