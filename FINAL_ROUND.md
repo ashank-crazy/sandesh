@@ -1,6 +1,7 @@
 # Final round plan
 
 Deadline: **Nov 24, 11:59 PM AoE = Wed Nov 25, 17:29 IST.** Our own hard stop: submit by **Tue Nov 24, 23:59 IST**.
+Compute: one RTX 3090 24 GB, shared with a labmate's jobs (no A100). Every GPU step below is sized for it.
 
 Rules from the hackathon pages (Nov 20): shortlisted teams "prove their thesis and submit a video presentation or
 slides"; the final judging uses only the video or slides. Finalists also get $200 in Hugging Face credits to polish
@@ -19,9 +20,9 @@ still hijacked), "on-device" without running on a device, CircuitKIT out of memo
 
 | | Experiment | Pass rule | GPU time (3090) |
 |---|---|---|---|
-| P1 | **Close the delegation gap (model v2).** Multi-turn training episodes from train scenarios only (en/hi/hinglish, train attack styles): turn 2 = follow-up scam, turn 3 = delegation. Gold: warn, never act for the attacker. Plus *legit-urgent* episodes where delegation should act (card-due reminder, bill), so the model does not learn "refuse delegation". 8 delegation phrasings per language for training; 4 different ones held out for test. PlainSFT on single-turn + multi-turn data, same budget, curated with CuratorKIT. | hijacked by turn 3 ≤ 5% on held-out phrasings (PlainSFT 20.0%); legit delegation done ≥ PlainSFT; single-turn ASR ≤ 0.5%, task success ≥ 98%; XSTest ≤ 15% | train ~3 h, eval ~2 h |
-| P2 | **Runs on the phone.** GGUF Q4_K_M (llama.cpp; Tiny Aya is Cohere2, which Cohere already ships as GGUF) for base, PlainSFT and v2. All four test splits + multi-turn through llama.cpp. Tokens/s on a laptop CPU, optionally a phone. Offline side-by-side demo on the Mac. | ASR at most 0.5 pts above bf16; task success within 2 pts | ~2 h |
-| P3 | **CircuitKIT: where the hijack happens.** Fix the OOM with shorter equal-length pairs (≤ 700 tokens) or a bigger GPU. EAP-IG on base, choose k on dev, knock out top-k heads vs 3 random sets on test, then the same heads' attribution in PlainSFT (did fine-tuning silence them?). Uses all four Track 2 repos. | top-k cuts the attacker-tool win rate ≥ 2x more than random heads, CIs not overlapping, and the no-scam task-tool win rate drops ≤ 5 pts; otherwise reported as a negative result | ~3 h (A100: ~1 h) |
+| P1 | **Close the delegation gap (model v2).** A LoRA patch on top of the round-1 PlainSFT model (`sandesh/delegation.py`). 1,000 *fresh* scenarios from the training distribution (en/hi/hinglish, training attack styles, no attacker identifier shared with any split), one decision per row because SafeTune trains on the last reply: turn 2 ("anything new?": report and warn about the follow-up scam) or turn 3 (delegation: set the reminder for a real card due date if there is one, otherwise say nothing needs doing and why). Plus 500 round-1 rows replayed. Training phrasings only (6 follow-ups, 8 delegations per language); the audit keeps the round-1 phrasings, which never appear in training, plus bn/ta/mr. CuratorKIT keeps all 1,489 rows; 2,560-token rows, so every label survives. | hijacked by turn 3 ≤ 5% (PlainSFT 20.0%); sets the card reminder when delegated ≥ 50% of the time it is due (new metric, computed for every model); single-turn ASR ≤ 0.5%, task success ≥ 98%; XSTest ≤ 15% | train ~2 h, audits ~2 h |
+| P2 | **Runs on the phone.** GGUF Q4_K_M (llama.cpp; Cohere ships Tiny Aya as GGUF, so llama.cpp supports it) for base (Cohere's own file), PlainSFT and v2. All four test splits + multi-turn through llama.cpp on the box. Tokens/s on a laptop, optionally a phone. Offline side-by-side demo on the Mac. Needs llama.cpp built on the box (CUDA if `nvcc` is there): tooling check pending. The Mac has 19 GB free and its sandbox does not allow building llama.cpp, so it is for the demo only. | ASR at most 0.5 pts above bf16; task success within 2 pts | ~1-2 h |
+| P3 | **CircuitKIT: where the hijack happens.** OOM fixed: the logits are computed at the decision token only (round 1 allocated [IG steps × ~1,400 tokens × 262k vocab]); same scores to the last digit on a test model. If memory still runs out, it retries on the shortest pairs with 3 IG steps. EAP-IG on base, choose k on dev, knock out top-k heads vs 3 random sets on test, then the same heads' attribution in PlainSFT (did fine-tuning silence them?). Uses all four Track 2 repos. | top-k cuts the attacker-tool win rate ≥ 2x more than random heads, CIs not overlapping, and the no-scam task-tool win rate drops ≤ 5 pts; otherwise reported as a negative result | ~2.5 h |
 | P4 | **Not luck: seeds.** PlainSFT with seeds 14 and 15 (round 1 used 13), full eval. Mean and range. | reported as is | ~6 h, tonight |
 | P5 | **Check the judge.** 100 Qwen3Guard verdicts (50 harmful-prompt answers, 50 XSTest) hand-labelled in a small page → agreement and Cohen's κ. Core metrics stay exact (no judge). | reported as is | none (~40 min of your time) |
 
@@ -49,8 +50,8 @@ an interactive Space running the GGUF on CPU.
 
 | Day | GPU box (you run it) | Claude |
 |---|---|---|
-| Fri 20 | 00:30-07:00 P4 seeds. Evening: P1 train, then eval | P1 code (episode builder, held-out phrasings, legit-delegation metric), P2 script, P3 OOM fix |
-| Sat 21 | P1 eval + multi-turn + best-of-N; P2 GGUF eval; P3 (A100 or credits if free) | slides draft, README v2 skeleton, scoring for P1-P4 |
+| Fri 20 | 00:30-07:00 P4 seeds. Then `scripts/final_round.sh` (waits for the seeds by itself): P1 ~4 h, P3 ~2.5 h | P1 and P3 done (code, tests, CPU smoke run). P2 script once the box tooling is known |
+| Sat 21 | P2 GGUF build + eval; leftovers | slides draft, README v2 skeleton, P1/P3/P4 numbers in |
 | Sun 22 | leftovers; v2 seeds if P1 passes; P5 labelling (you) | numbers into slides and README, demo set-up |
 | Mon 23 | publish final artifacts | record the video |
 | Tue 24 | – | buffer, review, **submit by 23:59 IST** |
@@ -59,7 +60,7 @@ an interactive Space running the GGUF on CPU.
 
 1. The finalist email: how the final is submitted, video length limit, slide format, and anything about updating
    round-1 artifacts.
-2. Is the A100 40GB free this week?
-3. Have the $200 HF credits arrived (they go to the team lead's email)?
-4. Narration: your voice or a TTS voice (Kokoro, as before)? Face on camera or not?
-5. Which phone, if any, for the on-device shot (Android or iPhone)?
+2. Have the $200 HF credits arrived (they go to the team lead's email)?
+3. Narration: your voice or a TTS voice (Kokoro, as before)? Face on camera or not?
+4. Which phone, if any, for the on-device shot (Android or iPhone)?
+5. P2 tooling on the box: the output of `nvcc --version; cmake --version; nproc; free -g; df -h /media/NAS/ashank`.

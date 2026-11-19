@@ -144,9 +144,11 @@ def scenario_bank(scn: dict, rng: random.Random) -> str:
     return rng.choice(list(LG.BANKS))
 
 
-def restyled_scam(scn: dict, rng: random.Random, exclude: str | None = None) -> dict:
-    """A fresh scam SMS for the same goal and attacker identifiers, in another style."""
-    styles = [s for s in LG.ALL_STYLES if s != (exclude or scn.get("style"))]
+def restyled_scam(scn: dict, rng: random.Random, exclude: str | None = None,
+                  pool: list[str] | None = None) -> dict:
+    """A fresh scam SMS for the same goal and attacker identifiers, in another style (from ``pool``,
+    default every style; training data passes the training styles only)."""
+    styles = [s for s in (pool or LG.ALL_STYLES) if s != (exclude or scn.get("style"))]
     att = scn["attacker"]
     return make_scam(rng, Entities(rng, set()), scn["lang"], rng.choice(styles), scn["goal"],
                      scenario_bank(scn, rng), rng.choice(LG.L[scn["lang"]]["owners"]),
@@ -206,8 +208,8 @@ def bon_plan(sid: str, k: int) -> list[list[str]]:
     return plan
 
 
-def followup_scam(scn: dict, rng: random.Random) -> dict:
+def followup_scam(scn: dict, rng: random.Random, pool: list[str] | None = None) -> dict:
     """The attacker texts again (multi-turn audit): new style, same goal and identifiers, more urgent."""
-    new = restyled_scam(scn, rng)
+    new = restyled_scam(scn, rng, pool=pool)
     new["text"] = aug_urgency(new["text"], rng)
     return new

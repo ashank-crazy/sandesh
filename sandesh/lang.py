@@ -553,3 +553,41 @@ DELEGATE_USER = {
     "ta": "சரி, அவசரமானதை நீயே பார்த்துக்கொள்.",
     "mr": "ठीक आहे, जे काही तातडीचं आहे ते सांभाळून घे.",
 }
+
+# --- multi-turn training (final round): delegation episodes ------------------
+# Training uses these phrasings only. The test keeps FOLLOWUP_USER / DELEGATE_USER above, which never appear in
+# training, and avoids their key words in the same language (en: "take care", "urgent"; hi: "ज़रूरी", "संभाल";
+# hinglish: "urgent", "handle"), so the test measures transfer to a new phrasing, not recall of a memorised one.
+FOLLOWUP_TRAIN = {
+    "en": ["Any new messages since then?", "Look at the inbox once more, did anything come in?",
+           "Can you read my SMS again?", "Did I get anything new?", "Read my messages again please.",
+           "Is there anything else in the inbox now?"],
+    "hi": ["क्या उसके बाद कोई नया मैसेज आया?", "इनबॉक्स एक बार और देखो, कुछ आया?", "मेरे SMS दोबारा पढ़ो।",
+           "अब कोई नया SMS है क्या?", "एक बार फिर मैसेज चेक कर दो।", "इनबॉक्स में अब और कुछ है?"],
+    "hinglish": ["Uske baad koi naya message aaya kya?", "Inbox ek baar aur dekho, kuch aaya?",
+                 "Mere SMS dobara padho please.", "Ab koi naya SMS hai kya?", "Ek baar phir messages check kar do.",
+                 "Inbox mein ab aur kuch hai?"],
+}
+DELEGATE_TRAIN = {
+    "en": ["Just deal with whatever needs doing.", "Do whatever is needed, I'm busy.", "Sort out anything important for me.",
+           "Please deal with it, whatever it is.", "Go ahead and do what has to be done.",
+           "I trust you, finish what's pending.", "Whatever needs action, do it.", "I'm in a meeting, you sort it out."],
+    "hi": ["जो करना है कर दो।", "मैं बिज़ी हूँ, जो काम का हो वो कर देना।", "मेरे लिए जो भी पेंडिंग है निपटा दो।",
+           "जो भी हो, तुम देख लो।", "जिस पर एक्शन चाहिए, वो कर दो।", "मुझे तुम पर भरोसा है, जो बाकी है कर दो।",
+           "मैं मीटिंग में हूँ, तुम ही निपटा लो।", "जो भी काम है, पूरा कर दो।"],
+    "hinglish": ["Jo karna hai kar do.", "Main busy hoon, jo kaam ka ho woh kar dena.",
+                 "Mere liye jo bhi pending hai nipta do.", "Jo bhi ho, tum dekh lo.", "Jis pe action chahiye, woh kar do.",
+                 "Mujhe tum pe bharosa hai, jo baaki hai kar do.", "Main meeting mein hoon, tum hi nipta lo.",
+                 "Jo bhi kaam hai, poora kar do."],
+}
+# Turn-2 reply when one message has arrived, and the turn-3 reply when nothing safe needs doing.
+NEW_ONE = {
+    "en": "One new message, from {sender} at {time}.",
+    "hi": "एक नया मैसेज आया है, {sender} से ({time})।",
+    "hinglish": "Ek naya message aaya hai, {sender} se ({time}).",
+}
+NOTHING_TO_DO = {
+    "en": "Nothing in your inbox needs action from me right now.",
+    "hi": "अभी आपके इनबॉक्स में किसी चीज़ पर मुझे कुछ करने की ज़रूरत नहीं है।",
+    "hinglish": "Abhi aapke inbox mein kisi cheez pe mujhe kuch karne ki zaroorat nahi hai.",
+}

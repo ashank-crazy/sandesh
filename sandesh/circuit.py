@@ -151,8 +151,11 @@ def _metric(logits, clean_logits, input_length, labels, mean=True, loss=True):
     """
     import torch
 
-    idx = torch.arange(logits.size(0), device=logits.device)
-    last = logits[idx, input_length - 1]
+    if logits.size(1) == 1:  # _last_position_unembed: only the decision position was computed
+        last = logits[:, 0]
+    else:
+        idx = torch.arange(logits.size(0), device=logits.device)
+        last = logits[idx, input_length - 1]
     gb = torch.gather(last, -1, labels.to(last.device))
     d = gb[:, 0] - gb[:, 1]
     if loss:
@@ -160,8 +163,21 @@ def _metric(logits, clean_logits, input_length, labels, mean=True, loss=True):
     return d.mean() if mean else d
 
 
+def _last_position_unembed(model) -> None:
+    """Unembed only the last position. The metric reads the decision token alone, but TransformerLens computes
+    [batch x seq x 262,144] logits for every integrated-gradients step, plus their gradient: on ~1,400-token
+    inboxes that was the 7.3 GiB allocation that ran out of memory on the shared 24 GB card in round 1.
+    Batches are left-padded, so the last position is every row's decision token."""
+    orig = model.unembed.forward
+
+    def forward(residual, *args, **kwargs):
+        return orig(residual[:, -1:, :], *args, **kwargs)
+
+    model.unembed.forward = forward
+
+
 def discover(model_path: str, name: str, data: Path, runs: Path, n: int, ig_steps: int, bs: int,
-             dtype: str, force: bool, cpu_ok: bool = False) -> None:
+             dtype: str, force: bool, cpu_ok: bool = False, max_pair_tokens: int | None = None) -> None:
     out = runs / name / "circuit"
     dst = out / "scores.json"
     if dst.exists() and not force:
@@ -177,20 +193,41 @@ def discover(model_path: str, name: str, data: Path, runs: Path, n: int, ig_step
     from circuitkit.backends.eap.graph import AttentionNode, Graph, MLPNode
     from circuitkit.data.eap_dataset import EAPDiscoveryDataset
 
-    pairs = _read(data / "circuit" / "pairs_dev.jsonl")[:n]
+    all_pairs = _read(data / "circuit" / "pairs_dev.jsonl")
+    if max_pair_tokens:
+        all_pairs = [p for p in all_pairs if p["n_tokens"] <= max_pair_tokens]
+    pairs = all_pairs[:n]
     out.mkdir(parents=True, exist_ok=True)
-    with (out / "pairs.csv").open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["clean", "corrupted", "correct_idx", "incorrect_idx"])
-        w.writeheader()
-        for p in pairs:
-            w.writerow({"clean": p["clean"], "corrupted": p["corrupt"], "correct_idx": p["attack_id"],
-                        "incorrect_idx": p["task_id"]})
+
+    def loader(ps):
+        with (out / "pairs.csv").open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["clean", "corrupted", "correct_idx", "incorrect_idx"])
+            w.writeheader()
+            for p in ps:
+                w.writerow({"clean": p["clean"], "corrupted": p["corrupt"], "correct_idx": p["attack_id"],
+                            "incorrect_idx": p["task_id"]})
+        # The prompts already carry the chat template (and its BOS), so CircuitKIT must not add another.
+        return EAPDiscoveryDataset(str(out / "pairs.csv"), templated=True).to_dataloader(
+            batch_size=bs, pair_padding_side="left")
+
     model = ck.load_model(model_path, dtype=dtype)
-    # The prompts already carry the chat template (and its BOS), so CircuitKIT must not add another.
-    dl = EAPDiscoveryDataset(str(out / "pairs.csv"), templated=True).to_dataloader(
-        batch_size=bs, pair_padding_side="left")
-    graph = Graph.from_model(model, node_scores=True)
-    attribute_node(model, graph, dl, _metric, method="EAP-IG-inputs", ig_steps=ig_steps)
+    _last_position_unembed(model)
+    # If memory still runs out, retry on the shortest pairs with fewer integrated-gradients steps; the
+    # config records which attempt produced the scores.
+    attempts = [(pairs, ig_steps), (sorted(all_pairs, key=lambda p: p["n_tokens"])[:n], min(ig_steps, 3))]
+    for i, (ps, steps) in enumerate(attempts):
+        graph = Graph.from_model(model, node_scores=True)
+        try:
+            attribute_node(model, graph, loader(ps), _metric, method="EAP-IG-inputs", ig_steps=steps)
+            pairs, ig_steps, fallback = ps, steps, i > 0
+            break
+        except torch.OutOfMemoryError:
+            if i == len(attempts) - 1:
+                raise
+            del graph
+            torch.cuda.empty_cache()
+            print(f"circuit {name}: out of GPU memory with {len(ps)} pairs (up to "
+                  f"{max(p['n_tokens'] for p in ps)} tokens), ig_steps {steps}; retrying on the shortest pairs")
     signed = {}
     for node in graph.nodes.values():
         if isinstance(node, AttentionNode):
@@ -208,7 +245,9 @@ def discover(model_path: str, name: str, data: Path, runs: Path, n: int, ig_step
                 diffs[key].append(float(last[p["attack_id"]] - last[p["task_id"]]))
 
     cfg = {"pairs": str(data / "circuit" / "pairs_dev.jsonl"), "n_pairs": len(pairs), "method": "EAP-IG-inputs",
-           "ig_steps": ig_steps, "batch_size": bs, "dtype": dtype, "metric": "-(logit[attack] - logit[task])"}
+           "ig_steps": ig_steps, "batch_size": bs, "dtype": dtype, "metric": "-(logit[attack] - logit[task])",
+           "max_pair_tokens": max(p["n_tokens"] for p in pairs), "shortest_pairs_fallback": fallback,
+           "by_lang": {l: sum(p["lang"] == l for p in pairs) for l in LG.ALL_LANGS if any(p["lang"] == l for p in pairs)}}
     CircuitScores(task="sandesh_injection", model=model_path, algorithm="eap-ig", level="node",
                   node_scores={k: abs(v) for k, v in signed.items()}, timestamp=CircuitScores.create_timestamp(),
                   version="1.0", discovery_cfg=cfg).to_json(out / "injection_scores.json")
@@ -418,6 +457,7 @@ def main(argv=None) -> None:
     ap.add_argument("--runs", default="runs")
     ap.add_argument("--seed", type=int, default=13)
     ap.add_argument("--max-tokens", type=int, default=1400, help="pairs: drop longer prompts")
+    ap.add_argument("--max-pair-tokens", type=int, default=None, help="discover: only dev pairs up to this length")
     ap.add_argument("--n", type=int, default=64, help="discover: dev pairs to attribute over")
     ap.add_argument("--ig-steps", type=int, default=5)
     ap.add_argument("--bs", type=int, default=1)
@@ -436,7 +476,7 @@ def main(argv=None) -> None:
     if a.cmd == "pairs":
         build_pairs(a.model, data, a.seed, a.max_tokens)
     elif a.cmd == "discover":
-        discover(a.model, a.name, data, runs, a.n, a.ig_steps, a.bs, a.dtype, a.force, a.cpu_ok)
+        discover(a.model, a.name, data, runs, a.n, a.ig_steps, a.bs, a.dtype, a.force, a.cpu_ok, a.max_pair_tokens)
     elif a.cmd == "sweep":
         sweep(a.model, a.name, data, runs, a.scores_from, a.n_random, max(a.bs, 8), a.baseline_only, a.force,
               a.limit)
