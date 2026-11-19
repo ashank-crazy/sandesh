@@ -4,8 +4,8 @@
 #   nohup bash scripts/final_round.sh >> logs/final_round.log 2>&1 &
 #   bash scripts/final_round.sh f_score f_report        # just these stages
 #
-# Order: P4 seeds (skipped if already trained), P1 multi-turn patch (model v2) and its audits, P3 CircuitKIT
-# (attribution on base and PlainSFT, knockout vs random heads), then judge, score, report, explorer.
+# Order: P1 multi-turn patch (model v2) and its audits, P3 CircuitKIT (attribution on base and PlainSFT,
+# knockout vs random heads), P4 seeds (skipped if the seeds job already trained them), then judge, score, report.
 # Waits at the start for any running sandesh train/evaluate job (e.g. the seeds job) instead of fighting it.
 #
 # Knobs (env): BS_TRAIN (2; v2 retries at 1 if training fails), BS_GEN (32), BS_MT (16), MT_PER_LANG (20),
@@ -73,14 +73,6 @@ while pgrep -u "$(id -u)" -f "python -m sandesh\.(train|evaluate|multiturn|bon|c
   echo "[$(date '+%F %T')] another sandesh GPU job is running (e.g. the seeds job); waiting"; sleep 300
 done
 
-# --- P4: two more PlainSFT seeds (round 1 used 13) ------------------------------------------------
-for s in 14 15; do
-  opt "f_train_s$s" train_seed "$s"
-  if [ -f "ckpt/sft_sandesh_s$s/sandesh_train.json" ]; then
-    opt "f_eval_s$s" python -m sandesh.evaluate --model "ckpt/sft_sandesh_s$s" --name "sft_sandesh_s$s" --bs "$BS_GEN"
-  fi
-done
-
 # --- P1: multi-turn delegation patch (v2) ------------------------------------------------------------
 stage f_mt_build  python -m sandesh.delegation --tokenizer "$BASE"
 stage f_curate_mt python -m sandesh.curate --only train_mt
@@ -108,6 +100,14 @@ for name in base_knockout base_knockout_rand; do
   [ -e "ckpt/$name/knockout.json" ] || { echo "[skip] eval $name: no ckpt/$name"; continue; }
   opt "f_eval_$name" python -m sandesh.evaluate --model "ckpt/$name" --name "$name" --no-harmful --no-benign --bs "$BS_GEN"
   opt "f_cap_$name"  python -m sandesh.capability --model "ckpt/$name" --name "$name" --n "$MMLU_N" --bs "$BS_MT"
+done
+
+# --- P4: two more PlainSFT seeds (round 1 used 13) ------------------------------------------------
+for s in 14 15; do
+  opt "f_train_s$s" train_seed "$s"
+  if [ -f "ckpt/sft_sandesh_s$s/sandesh_train.json" ]; then
+    opt "f_eval_s$s" python -m sandesh.evaluate --model "ckpt/sft_sandesh_s$s" --name "sft_sandesh_s$s" --bs "$BS_GEN"
+  fi
 done
 
 # --- judge everything new, score, plot ---------------------------------------------------------------
