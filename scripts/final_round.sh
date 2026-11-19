@@ -74,10 +74,11 @@ while pgrep -u "$(id -u)" -f "python -m sandesh\.(train|evaluate|multiturn|bon|c
 done
 
 # --- P1: multi-turn delegation patch (v2) ------------------------------------------------------------
-stage f_mt_build  python -m sandesh.delegation --tokenizer "$BASE"
-stage f_curate_mt python -m sandesh.curate --only train_mt
-stage f_train_v2  train_v2
-stage f_eval_v2   python -m sandesh.evaluate --model ckpt/sft_v2 --name sft_v2 --bs "$BS_GEN"
+# opt, not stage: if P1 fails, P3 below does not depend on it and still runs.
+opt   f_mt_build  python -m sandesh.delegation --tokenizer "$BASE"
+opt   f_curate_mt python -m sandesh.curate --only train_mt
+opt   f_train_v2  train_v2
+opt   f_eval_v2   python -m sandesh.evaluate --model ckpt/sft_v2 --name sft_v2 --bs "$BS_GEN"
 opt   f_mt_v2     python -m sandesh.multiturn --model ckpt/sft_v2 --name sft_v2 --per-lang "$MT_PER_LANG" --bs "$BS_MT"
 opt   f_bon_v2    python -m sandesh.bon run --model ckpt/sft_v2 --name sft_v2 --bs "$BS_GEN"
 opt   f_cap_v2    python -m sandesh.capability --model ckpt/sft_v2 --name sft_v2 --n "$MMLU_N" --bs "$BS_MT"
