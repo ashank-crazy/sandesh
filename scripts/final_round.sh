@@ -5,7 +5,7 @@
 #   bash scripts/final_round.sh f_score f_report        # just these stages
 #
 # Order: P1 multi-turn patch (model v2) and its audits, P3 CircuitKIT (attribution on base and PlainSFT,
-# knockout vs random heads), P4 seeds (skipped if the seeds job already trained them), then judge, score, report.
+# knockout vs random heads), P4 seeds only with SEEDS=1 (~6 h; skipped if already trained), then judge, score, report.
 # Waits at the start for any running sandesh train/evaluate job (e.g. the seeds job) instead of fighting it.
 #
 # Knobs (env): BS_TRAIN (2; v2 retries at 1 if training fails), BS_GEN (32), BS_MT (16), MT_PER_LANG (20),
@@ -103,7 +103,8 @@ for name in base_knockout base_knockout_rand; do
 done
 
 # --- P4: two more PlainSFT seeds (round 1 used 13) ------------------------------------------------
-for s in 14 15; do
+[ -n "${SEEDS:-}" ] || echo "[skip] P4 seeds (run with SEEDS=1)"
+for s in ${SEEDS:+14 15}; do
   opt "f_train_s$s" train_seed "$s"
   if [ -f "ckpt/sft_sandesh_s$s/sandesh_train.json" ]; then
     opt "f_eval_s$s" python -m sandesh.evaluate --model "ckpt/sft_sandesh_s$s" --name "sft_sandesh_s$s" --bs "$BS_GEN"
