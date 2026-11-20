@@ -16,11 +16,17 @@
               are the control. k is chosen on the dev pairs only.
 ``knockout``  Write a Hugging Face checkpoint with those heads zeroed (and one with random heads, the control).
               ``run_all`` evaluates both like any other condition: base_knockout, base_knockout_rand.
+``patch``     Activation patching on the test pairs: swap the top-k heads' outputs between the scam and no-scam
+              versions of the same inbox (weights untouched). Restore: the scam prompt with those heads given their
+              no-scam outputs; how much of the scam's push toward the attacker's tool goes away? Inject: the
+              no-scam prompt with those heads given their scam outputs; how much of the push comes back? Random
+              heads are the control; the pass rule is in FINAL_ROUND.md (P3b).
 
     python -m sandesh.circuit pairs --model CohereLabs/tiny-aya-fire
     .venv-ck/bin/python -m sandesh.circuit discover --model CohereLabs/tiny-aya-fire --name base
     python -m sandesh.circuit sweep --model CohereLabs/tiny-aya-fire --name base
     python -m sandesh.circuit knockout --model CohereLabs/tiny-aya-fire --out ckpt/base_knockout
+    python -m sandesh.circuit patch --model CohereLabs/tiny-aya-fire --name base --limit 300
 """
 
 from __future__ import annotations
@@ -584,9 +590,201 @@ def knockout(model_path: str, out: Path, runs: Path, scores_from: str, k: int | 
           + ", ".join(meta["heads"]))
 
 
+# --------------------------------------------------------------------------- patch (activation patching)
+def _forward_last(model, enc):
+    """Logits at the last position, no KV cache kept."""
+    try:
+        return model(**enc, logits_to_keep=1, use_cache=False).logits[:, -1, :]
+    except TypeError:
+        return model(**enc, use_cache=False).logits[:, -1, :]
+
+
+def capture_heads(model, enc):
+    """One forward pass that records every layer's per-head attention outputs (the input to o_proj, all
+    positions). Returns ({layer: tensor [1, pos, heads*head_dim]}, last-position logits)."""
+    acts, handles = {}, []
+    for l, mod in _o_projs(model).items():
+        def hook(m, args, l=l):
+            acts[l] = args[0].detach().clone()
+        handles.append(mod.register_forward_pre_hook(hook))
+    try:
+        logits = _forward_last(model, enc)
+    finally:
+        for h in handles:
+            h.remove()
+    return acts, logits
+
+
+class patched:
+    """Context manager: the given heads' outputs (their slice of the o_proj input, every position) are replaced
+    by recorded ones from another prompt of the same token length. The weights are untouched, so the model stays
+    in its normal operating range (unlike zeroing heads)."""
+
+    def __init__(self, model, heads, source: dict):
+        self.model, self.heads, self.source, self.handles = model, list(heads), source, []
+
+    def __enter__(self):
+        import torch
+
+        projs, hd = _o_projs(self.model), _head_dim(self.model)
+        by_layer = defaultdict(list)
+        for l, h in self.heads:
+            by_layer[l].append(h)
+        for l, hs in by_layer.items():
+            src = self.source[l]
+            idx = torch.cat([torch.arange(h * hd, (h + 1) * hd) for h in sorted(hs)]).to(src.device)
+
+            def hook(m, args, idx=idx, src=src):
+                x = args[0]
+                if x.shape != src.shape:
+                    raise ValueError(f"patch source shape {tuple(src.shape)} != activation shape {tuple(x.shape)}")
+                x = x.clone()
+                x[..., idx] = src[..., idx].to(x.dtype)
+                return (x,) + tuple(args[1:])
+
+            self.handles.append(projs[l].register_forward_pre_hook(hook))
+        return self
+
+    def __exit__(self, *exc):
+        for h in self.handles:
+            h.remove()
+
+
+def patch_sets(ranked: list, every: list, k_chosen: int, n_random: int, n_random_curve: int) -> dict:
+    """Head sets to patch: top-k and random-k for every k in KS (n_random random sets at the chosen k,
+    n_random_curve elsewhere), plus all heads."""
+    sets = {}
+    for k in [k for k in KS if k <= len(ranked)]:
+        sets[f"top{k}"] = ranked[:k]
+        for s in range(n_random if k == k_chosen else n_random_curve):
+            sets[f"rand{k}_{s}"] = sorted(random.Random(f"knockout-rand:{s}").sample(every, k))
+    sets["all"] = list(every)
+    return sets
+
+
+def patch_pairs(model, tok, pairs: list[dict], sets: dict, log_every: int = 25) -> list[dict]:
+    """For each pair: logit gap (attacker's tool minus task's tool) on the scam prompt and on the no-scam prompt,
+    then for every head set the gap with those heads *restored* (scam prompt, heads given their no-scam outputs)
+    and *injected* (no-scam prompt, heads given their scam outputs)."""
+    import time
+
+    import torch
+
+    dev = next(model.parameters()).device
+    rows, t0 = [], time.time()
+
+    def enc_of(text):
+        return {k: v.to(dev) for k, v in tok(text, return_tensors="pt", add_special_tokens=False).items()}
+
+    def gap(logits, p):
+        lg = logits[0].float()
+        return float(lg[p["attack_id"]] - lg[p["task_id"]])
+
+    with torch.no_grad():
+        for i, p in enumerate(pairs):
+            es, en = enc_of(p["clean"]), enc_of(p["corrupt"])
+            if es["input_ids"].shape != en["input_ids"].shape:
+                raise ValueError(f"pair {p['id']}: scam and no-scam prompts differ in length")
+            acts_s, lg_s = capture_heads(model, es)
+            acts_n, lg_n = capture_heads(model, en)
+            row = {"id": p["id"], "lang": p["lang"], "n_tokens": p["n_tokens"],
+                   "gap_scam": gap(lg_s, p), "gap_no_scam": gap(lg_n, p), "restore": {}, "inject": {}}
+            for name, heads in sets.items():
+                with patched(model, heads, acts_n):
+                    row["restore"][name] = gap(_forward_last(model, es), p)
+                with patched(model, heads, acts_s):
+                    row["inject"][name] = gap(_forward_last(model, en), p)
+            rows.append(row)
+            del acts_s, acts_n
+            if (i + 1) % log_every == 0 or i + 1 == len(pairs):
+                el = time.time() - t0
+                print(f"patch: {i + 1}/{len(pairs)} pairs, {el / 60:.1f} min, "
+                      f"~{el / (i + 1) * (len(pairs) - i - 1) / 60:.0f} min left", flush=True)
+    return rows
+
+
+def _patch_stats(rows: list[dict], name: str) -> dict:
+    """Share of the scam's push removed by restoring a head set, and recreated by injecting it:
+    removed = mean(gap_scam - gap_restored) / mean(gap_scam - gap_no_scam),
+    recreated = mean(gap_injected - gap_no_scam) / mean(gap_scam - gap_no_scam)."""
+    n = len(rows)
+    push = sum(r["gap_scam"] - r["gap_no_scam"] for r in rows) / n
+    sets = [s for s in rows[0]["restore"] if s == name or (name.startswith("rand") and s.startswith(name + "_"))]
+    rem = sum(r["gap_scam"] - r["restore"][s] for r in rows for s in sets) / (n * len(sets))
+    rec = sum(r["inject"][s] - r["gap_no_scam"] for r in rows for s in sets) / (n * len(sets))
+    return {"removed": rem / push if push else None, "recreated": rec / push if push else None,
+            "attacker_preferred_restored": sum(r["restore"][s] > 0 for r in rows for s in sets) / (n * len(sets)),
+            "attacker_preferred_injected": sum(r["inject"][s] > 0 for r in rows for s in sets) / (n * len(sets)),
+            "n_sets": len(sets)}
+
+
+def patch_verdict(rows: list[dict], k: int, reps: int = 2000, seed: int = 0) -> dict:
+    """Pre-registered rule (FINAL_ROUND.md, P3b): at the chosen k, restoring the top-k heads removes at least twice
+    the share of the scam's push that restoring k random heads removes (mean of the random sets), with 95%
+    bootstrap intervals over pairs that do not overlap; the same for injecting (share recreated)."""
+    rng = random.Random(seed)
+    out = {"k": k, "n_pairs": len(rows)}
+    for metric in ("removed", "recreated"):
+        top, rnd = _patch_stats(rows, f"top{k}")[metric], _patch_stats(rows, f"rand{k}")[metric]
+        bt, br = [], []
+        for _ in range(reps):
+            sample = [rows[rng.randrange(len(rows))] for _ in rows]
+            bt.append(_patch_stats(sample, f"top{k}")[metric])
+            br.append(_patch_stats(sample, f"rand{k}")[metric])
+        ci = lambda xs: [sorted(xs)[int(0.025 * reps)], sorted(xs)[int(0.975 * reps) - 1]]
+        ct, cr = ci(bt), ci(br)
+        passed = top is not None and rnd is not None and top >= 2 * max(rnd, 0.0) and ct[0] > cr[1]
+        out[metric] = {"top": top, "top_ci95": ct, "random": rnd, "random_ci95": cr, "pass": passed}
+    out["pass"] = out["removed"]["pass"] and out["recreated"]["pass"]
+    return out
+
+
+def patch(model_path: str, name: str, data: Path, runs: Path, scores_from: str, k: int | None, limit: int | None,
+          n_random: int, force: bool) -> None:
+    from .gen import load_model
+
+    out = runs / name / "circuit"
+    dst = out / "patching.json"
+    if dst.exists() and not force:
+        print(f"skip {dst} (exists)")
+        return
+    sp = runs / scores_from / "circuit" / "scores.json"
+    if k is None:
+        k = json.loads((runs / scores_from / "circuit" / "sweep.json").read_text()).get("chosen_k")
+    if not k:
+        raise SystemExit("no k given and the sweep chose none")
+    pairs = _read(data / "circuit" / "pairs_test.jsonl")[:limit]
+    sets = patch_sets(ranked_heads(sp), all_heads(sp), k, n_random, 1)
+    model, tok = load_model(model_path)
+    model.eval()
+    print(f"patch {name}: {len(pairs)} test pairs, {len(sets)} head sets, chosen k = {k}")
+    rows = patch_pairs(model, tok, pairs, sets)
+    _write(out / "patching_pairs.jsonl", rows)
+    names = [s for s in sets if not s.startswith("rand")] + sorted({s.rsplit("_", 1)[0] for s in sets
+                                                                     if s.startswith("rand")}, key=lambda s: int(s[4:]))
+    res = {"model": model_path, "scores_from": str(sp), "k": k, "n_pairs": len(rows),
+           "gap_scam": sum(r["gap_scam"] for r in rows) / len(rows),
+           "gap_no_scam": sum(r["gap_no_scam"] for r in rows) / len(rows),
+           "attacker_preferred_scam": sum(r["gap_scam"] > 0 for r in rows) / len(rows),
+           "attacker_preferred_no_scam": sum(r["gap_no_scam"] > 0 for r in rows) / len(rows),
+           "sets": {s: _patch_stats(rows, s) for s in names},
+           "heads": {s: [f"A{l}.{h}" for l, h in v] for s, v in sets.items() if s != "all"},
+           "verdict": patch_verdict(rows, k)}
+    groups = {"training": [r for r in rows if r["lang"] in LG.TRAIN_LANGS],
+              "held_out": [r for r in rows if r["lang"] not in LG.TRAIN_LANGS]}
+    res["by_lang_group"] = {g: {"n": len(rs), "top": _patch_stats(rs, f"top{k}"), "random": _patch_stats(rs, f"rand{k}")}
+                            for g, rs in groups.items() if rs}
+    out.mkdir(parents=True, exist_ok=True)
+    dst.write_text(json.dumps(res, indent=1))
+    v = res["verdict"]
+    print(f"patch {name}, k={k}: restoring top heads removes {v['removed']['top']:.0%} of the scam's push "
+          f"(random {v['removed']['random']:.0%}); injecting recreates {v['recreated']['top']:.0%} "
+          f"(random {v['recreated']['random']:.0%}); rule {'PASSED' if v['pass'] else 'not passed'}")
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["pairs", "discover", "sweep", "knockout"])
+    ap.add_argument("cmd", choices=["pairs", "discover", "sweep", "knockout", "patch"])
     ap.add_argument("--model", required=True)
     ap.add_argument("--name", default="base")
     ap.add_argument("--data", default="data")
@@ -602,8 +800,8 @@ def main(argv=None) -> None:
     ap.add_argument("--scores-from", default="base", help="sweep/knockout: whose circuit to knock out")
     ap.add_argument("--n-random", type=int, default=3, help="sweep: random-head control sets per k")
     ap.add_argument("--baseline-only", action="store_true", help="sweep: no knockouts, just the k=0 numbers")
-    ap.add_argument("--limit", type=int, default=None, help="sweep: first N pairs per group (debug)")
-    ap.add_argument("--k", type=int, default=None, help="knockout: heads to zero (default: the sweep's choice)")
+    ap.add_argument("--limit", type=int, default=None, help="sweep: first N pairs per group; patch: first N test pairs")
+    ap.add_argument("--k", type=int, default=None, help="knockout/patch: heads (default: the sweep's choice)")
     ap.add_argument("--random-seed", type=int, default=None, help="knockout: random heads instead (control)")
     ap.add_argument("--out", default=None, help="knockout: output checkpoint dir")
     ap.add_argument("--force", action="store_true")
@@ -616,6 +814,8 @@ def main(argv=None) -> None:
     elif a.cmd == "sweep":
         sweep(a.model, a.name, data, runs, a.scores_from, a.n_random, max(a.bs, 8), a.baseline_only, a.force,
               a.limit)
+    elif a.cmd == "patch":
+        patch(a.model, a.name, data, runs, a.scores_from, a.k, a.limit, a.n_random, a.force)
     else:
         if not a.out:
             ap.error("knockout needs --out")
