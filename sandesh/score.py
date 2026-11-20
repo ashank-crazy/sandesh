@@ -30,7 +30,7 @@ from .world import REPLY_TASKS, TEST_SPLITS
 
 CONDITION_ORDER = ["base", "base_defensive", "base_spotlight", "base_guard", "base_knockout", "base_knockout_rand",
                    "sft_clean", "sft_sandesh", "sft_sandesh_s14", "sft_sandesh_s15", "sft_mix", "safegrad_sandesh",
-                   "sft_v2"]
+                   "sft_v2", "base_q4", "base_cohere_q4", "sft_sandesh_q4", "sft_v2_q4"]
 CONDITION_LABELS = {
     "base": "Tiny Aya Fire",
     "base_defensive": "+ defensive system prompt",
@@ -45,6 +45,10 @@ CONDITION_LABELS = {
     "sft_sandesh_s14": "SFT on Sandesh (PlainSFT), seed 14",
     "sft_sandesh_s15": "SFT on Sandesh (PlainSFT), seed 15",
     "sft_v2": "PlainSFT + multi-turn patch (v2)",
+    "base_q4": "Tiny Aya Fire, 4-bit GGUF (llama.cpp)",
+    "base_cohere_q4": "Tiny Aya Fire, Cohere's own 4-bit GGUF (llama.cpp)",
+    "sft_sandesh_q4": "PlainSFT, 4-bit GGUF (llama.cpp)",
+    "sft_v2_q4": "v2, 4-bit GGUF (llama.cpp)",
 }
 SPLIT_LABELS = {
     "test_iid": "seen langs + styles", "test_ood_lang": "unseen languages",

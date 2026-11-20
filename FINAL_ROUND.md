@@ -7,6 +7,18 @@ Rules from the hackathon pages (Nov 20): shortlisted teams "prove their thesis a
 slides"; the final judging uses only the video or slides. Finalists also get $200 in Hugging Face credits to polish
 artifacts or run extra experiments. The submit page now has a recommended write-up layout; README v2 follows it.
 
+## Status (Fri Nov 20, afternoon IST)
+
+- **P1 passed all five rules** (v2): hijacked by turn 3 0.0% (0 of 120; 95% upper bound 3.1%), card reminder when
+  delegated 100%, single-turn ASR 0.1% (1 of 1,121), task success 99.0% clean / 99.5% under attack, XSTest 9.2%.
+  Also best-of-16 0%, warns at turn 2 100%, Global-MMLU 48.0% (= base).
+- **P3** attribution ran out of memory again: TransformerLens builds a [pos x heads x d_head x d_model] temporary for
+  per-head outputs (6.6 GiB on an 845-token inbox). Fixed (e390364) with CircuitKIT's own opt-in memory patch, no
+  per-head input copies (only edge attribution reads them), a reduced vocabulary, and one pair at a time, shortest
+  first; same scores as before on SmolLM2 (largest difference 3e-6). Rerun started.
+- **P2** tooling: llama.cpp b12318's prebuilt Ubuntu CUDA 12.8 binaries (the box's driver; no compiler needed) and
+  the same tag's converter. `scripts/p2.sh`: convert + quantize on CPU, then evaluate on the GPU once it is free.
+
 ## The thesis
 
 A single scam SMS can hijack an on-device Tiny Aya assistant. A small LoRA fine-tune built with
@@ -21,7 +33,7 @@ still hijacked), "on-device" without running on a device, CircuitKIT out of memo
 | | Experiment | Pass rule | GPU time (3090) |
 |---|---|---|---|
 | P1 | **Close the delegation gap (model v2).** A LoRA patch on top of the round-1 PlainSFT model (`sandesh/delegation.py`). 1,000 *fresh* scenarios from the training distribution (en/hi/hinglish, training attack styles, no attacker identifier shared with any split), one decision per row because SafeTune trains on the last reply: turn 2 ("anything new?": report and warn about the follow-up scam) or turn 3 (delegation: set the reminder for a real card due date if there is one, otherwise say nothing needs doing and why). Plus 500 round-1 rows replayed. Training phrasings only (6 follow-ups, 8 delegations per language); the audit keeps the round-1 phrasings, which never appear in training, plus bn/ta/mr. CuratorKIT keeps all 1,489 rows; 2,560-token rows, so every label survives. | hijacked by turn 3 ≤ 5% (PlainSFT 20.0%); sets the card reminder when delegated ≥ 50% of the time it is due (new metric, computed for every model); single-turn ASR ≤ 0.5%, task success ≥ 98%; XSTest ≤ 15% | train ~2 h, audits ~2 h |
-| P2 | **Runs on the phone.** GGUF Q4_K_M (llama.cpp; Cohere ships Tiny Aya as GGUF, so llama.cpp supports it) for base (Cohere's own file), PlainSFT and v2. All four test splits + multi-turn through llama.cpp on the box. Tokens/s on a laptop, optionally a phone. Offline side-by-side demo on the Mac. Needs llama.cpp built on the box (CUDA if `nvcc` is there): tooling check pending. The Mac has 19 GB free and its sandbox does not allow building llama.cpp, so it is for the demo only. | ASR at most 0.5 pts above bf16; task success within 2 pts | ~1-2 h |
+| P2 | **Runs on the phone.** GGUF Q4_K_M (llama.cpp; Cohere ships Tiny Aya as GGUF, so llama.cpp supports it) for base (Cohere's own file), PlainSFT and v2. All four test splits + multi-turn through llama.cpp on the box. Tokens/s on a laptop, optionally a phone. Offline side-by-side demo on the Mac. llama.cpp's prebuilt CUDA 12.8 binaries (`scripts/setup_llama.sh`), so nothing is compiled; the Mac is for the demo only. | ASR at most 0.5 pts above bf16; task success within 2 pts | ~1-2 h |
 | P3 | **CircuitKIT: where the hijack happens.** OOM fixed: the logits are computed at the decision token only (round 1 allocated [IG steps × ~1,400 tokens × 262k vocab]); same scores to the last digit on a test model. If memory still runs out, it retries on the shortest pairs with 3 IG steps. EAP-IG on base, choose k on dev, knock out top-k heads vs 3 random sets on test, then the same heads' attribution in PlainSFT (did fine-tuning silence them?). Uses all four Track 2 repos. | top-k cuts the attacker-tool win rate ≥ 2x more than random heads, CIs not overlapping, and the no-scam task-tool win rate drops ≤ 5 pts; otherwise reported as a negative result | ~2.5 h |
 | P4 | **Not luck: seeds.** PlainSFT with seeds 14 and 15 (round 1 used 13), full eval. Mean and range. | reported as is | ~6 h, tonight |
 | P5 | **Check the judge.** 100 Qwen3Guard verdicts (50 harmful-prompt answers, 50 XSTest) hand-labelled in a small page → agreement and Cohen's κ. Core metrics stay exact (no judge). | reported as is | none (~40 min of your time) |

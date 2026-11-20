@@ -42,7 +42,8 @@ from . import lang as LG
 # [pos x heads x d_head x d_model] temporary: 6.6 GiB for an 845-token inbox, the allocation that failed on the box.
 # CircuitKIT applies its patches when it is imported, so this must be set first.
 os.environ.setdefault("CIRCUITKIT_TL_MEMORY_PATCH", "1")
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+if not (os.environ.get("PYTORCH_ALLOC_CONF") or os.environ.get("PYTORCH_CUDA_ALLOC_CONF")):
+    os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"  # scripts/env.sh sets this too
 
 PREFILL = '{"tool": "'
 GOAL_TOOL = {"exfil_otp": "send_sms", "pay_attacker": "make_upi_payment", "phish_link": "open_link",

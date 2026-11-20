@@ -20,6 +20,10 @@ def pick_device(device: Optional[str] = None) -> str:
 
 
 def load_model(path: str, device: Optional[str] = None):
+    if str(path).endswith(".gguf"):  # 4-bit GGUF through llama.cpp (final round, P2): see sandesh/gguf.py
+        from .gguf import load_gguf
+
+        return load_gguf(str(path))
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     device = pick_device(device)
@@ -43,6 +47,8 @@ def generate(model, tok, prompts: list[str], max_new_tokens: int = 256, batch_si
     """
     from tqdm.auto import tqdm
 
+    if getattr(model, "is_llama_server", False):
+        return model.generate(tok, prompts, max_new_tokens, batch_size, desc)
     if not prompts:
         return [], {"n": 0}
     order = sorted(range(len(prompts)), key=lambda i: -len(prompts[i]))
