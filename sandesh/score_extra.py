@@ -322,7 +322,7 @@ def _ck_tuned(runs: Path) -> str | None:
 
 
 # --------------------------------------------------------------------------- P2: 4-bit GGUF
-GGUF_MODELS = [("sft_v2", "sft_v2"), ("sft_sandesh", "sft_sandesh"), ("base", "base"), ("base_cohere", "base")]
+GGUF_MODELS = [("sft_v21", "sft_v21"), ("sft_v2", "sft_v2"), ("sft_sandesh", "sft_sandesh"), ("base", "base"), ("base_cohere", "base")]
 
 
 def gguf_summary(runs: Path, root: Path = Path("ckpt/gguf")) -> dict | None:

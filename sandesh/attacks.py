@@ -139,7 +139,8 @@ _BANK_BY_SENDER = {v: k for k, v in LG.BANKS.items()}
 
 def scenario_bank(scn: dict, rng: random.Random) -> str:
     for m in scn["inbox"]:
-        if m.get("kind") in ("bank_otp", "card") and m["sender"] in _BANK_BY_SENDER:
+        # bank_no_action: v2.1's stand-in for the card SMS (same bank sender), so a pair's two halves match here
+        if m.get("kind") in ("bank_otp", "card", "bank_no_action") and m["sender"] in _BANK_BY_SENDER:
             return _BANK_BY_SENDER[m["sender"]]
     return rng.choice(list(LG.BANKS))
 

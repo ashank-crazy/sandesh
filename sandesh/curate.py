@@ -14,13 +14,19 @@ import json
 from pathlib import Path
 
 
+# v2.1's rows come in pairs that differ in one SMS and the answer (character 3-gram Jaccard up to ~0.92, which
+# CuratorKIT's 128-permutation MinHash estimates with ~0.02 noise): a slightly higher threshold keeps both halves
+# while still dropping true copies.
+THRESHOLD = {"train_mt21": 0.97}
+
+
 def curate(src: Path, out: Path, name: str) -> dict:
     from curatorkit import Curator, CuratorConfig
 
     result = Curator(CuratorConfig(
         dataset=str(src),
         dedup="minhash",
-        minhash_threshold=0.95,  # scenarios share a template; only drop true near-copies
+        minhash_threshold=THRESHOLD.get(name, 0.95),  # scenarios share a template; only drop true near-copies
         clean=True,
         # CuratorKIT's token gate measures the first exchange only (request +
         # read_inbox call), which is short by design; the real content is in later turns.
@@ -53,7 +59,7 @@ def build_mix(data: Path) -> Path:
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", default="data")
-    ap.add_argument("--only", nargs="*", help="subset of: train train_clean dev safety train_mix")
+    ap.add_argument("--only", nargs="*", help="subset of: train train_clean dev safety train_mix train_mt train_mt21")
     args = ap.parse_args(argv)
     data = Path(args.data)
     names = args.only or ["train", "train_clean", "dev", "safety"]
