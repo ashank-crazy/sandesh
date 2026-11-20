@@ -251,6 +251,10 @@ def circuit_summary(runs: Path) -> dict | None:
             L, H = s["n_layers"], s["n_heads"]
             pos = sorted(((v, k) for k, v in ns.items() if k.startswith("A") and v > 0), reverse=True)
             mass = sum(v for v, _ in pos)
+            c = s["config"]
+            d.update(pair_tokens=[c.get("min_pair_tokens"), c.get("max_pair_tokens")],
+                     top10_stability=(s.get("top10_stability") or {}).get("mean_inclusion"),
+                     n_dev_pairs=c.get("dev_pairs_available"))
             d.update(n_pairs=s["config"]["n_pairs"], ig_steps=s["config"]["ig_steps"], n_layers=L, n_heads=H,
                      circuitkit=s.get("circuitkit"), logit_diff=s["logit_diff"],
                      top_heads=[[k, v] for v, k in pos[:10]], positive_head_mass=mass,
@@ -400,8 +404,11 @@ def circuit_markdown(ck: dict | None) -> list[str]:
     b, g, gl = ck.get("base") or {}, ck.get(tuned) or {}, CK_LABEL.get(tuned, tuned)
     L = ["", "## Inside the model: where the hijack happens (CircuitKIT)", ""]
     if b.get("n_pairs"):
+        span = b.get("pair_tokens") or [None, None]
+        fit = (f" ({span[0]}-{span[1]} tokens: the shortest of the {b['n_dev_pairs']} dev pairs, one at a time, as many "
+               "as fit in GPU memory beside other jobs)") if span[0] else ""
         L += [f"CircuitKIT {b.get('circuitkit') or ''} EAP-IG ({b['ig_steps']} integration steps) over {b['n_pairs']} dev "
-              "pairs, at the token right after `{\"tool\": \"`, where the assistant picks its action. Each pair is an "
+              f"pairs{fit}, at the token right after `{{\"tool\": \"`, where the assistant picks its action. Each pair is an "
               "attacked inbox and the same inbox with the scam replaced by a promo SMS of exactly the same token "
               "length. Score > 0: the component carries the scam's push toward the attacker's tool.", ""]
     rows = [("Logit gap, attacker's tool − task's tool, scam present (dev pairs)",
@@ -414,7 +421,9 @@ def circuit_markdown(ck: dict | None) -> list[str]:
              lambda d: _fmt(((d.get("sweep") or {}).get("baseline", {}).get("test") or {})
                             .get("task_beats_attack_no_scam"))),
             ("Positive attribution on attention heads (total)", lambda d: _num(d.get("positive_head_mass"), 3)),
-            ("Share of it in the top 10 heads", lambda d: _fmt(d.get("top10_share")))]
+            ("Share of it in the top 10 heads", lambda d: _fmt(d.get("top10_share"))),
+            ("Top-10 heads still in the top 10 when the pairs are resampled (bootstrap, mean)",
+             lambda d: _fmt(d.get("top10_stability")))]
     L += [f"| | Tiny Aya Fire | {gl} |", "|---|---|---|"]
     L += [f"| {name} | {f(b)} | {f(g)} |" for name, f in rows]
     if b.get("top_heads"):

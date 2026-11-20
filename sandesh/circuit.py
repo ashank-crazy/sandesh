@@ -28,12 +28,21 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
+import os
 import random
 import re
 from collections import defaultdict
 from pathlib import Path
 
 from . import lang as LG
+
+# CircuitKIT ships a TransformerLens memory patch (per-head attention outputs by einsum, no transposed weight copies)
+# switched off by default because it changes bf16 rounding. Without it, TransformerLens builds a
+# [pos x heads x d_head x d_model] temporary: 6.6 GiB for an 845-token inbox, the allocation that failed on the box.
+# CircuitKIT applies its patches when it is imported, so this must be set first.
+os.environ.setdefault("CIRCUITKIT_TL_MEMORY_PATCH", "1")
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 PREFILL = '{"tool": "'
 GOAL_TOOL = {"exfil_otp": "send_sms", "pay_attacker": "make_upi_payment", "phish_link": "open_link",
@@ -176,8 +185,114 @@ def _last_position_unembed(model) -> None:
     model.unembed.forward = forward
 
 
+class _WhereIfNeeded:
+    """Stands in for ``torch`` inside TransformerLens' attention module only.
+
+    After the softmax TransformerLens runs ``torch.where(torch.isnan(pattern), zeros, pattern)``, which keeps the
+    boolean mask and a second copy of the pattern for the backward pass: two extra [heads x pos x pos] tensors per
+    layer. A row is all NaN only when it is fully masked, which needs padding; our pairs have equal lengths and run one
+    at a time, so there is none. When the condition is all False this returns ``pattern`` itself (same values, same
+    gradient); any other call goes to torch unchanged."""
+
+    def __init__(self, torch_module):
+        self._t = torch_module
+
+    def __getattr__(self, name):
+        return getattr(self._t, name)
+
+    def where(self, cond, *args, **kwargs):
+        t = self._t
+        if (len(args) == 2 and not kwargs and all(isinstance(x, t.Tensor) for x in (cond, *args))
+                and cond.dtype == t.bool and cond.shape == args[0].shape == args[1].shape
+                and args[0].dtype == args[1].dtype and not bool(cond.any())):
+            return args[1]
+        return t.where(cond, *args, **kwargs)
+
+
+def _lean_for_attribution(model, pairs: list[dict]) -> dict:
+    """Free what node attribution does not need, so ~1,000-token inboxes fit next to other jobs on a 24 GB card.
+
+    * Per-head copies of the attention input (``use_split_qkv_input``) are read only by edge attribution; node scores
+      use each head's output and its gradient. They cost 3 x [pos x heads x d_model] per layer, kept for backward.
+    * The embedding and unembedding (each 262,144 x 2,048) shrink to the tokens these pairs contain and the tool-name
+      tokens they compare. CircuitKIT keeps the embedding differentiable to anchor the backward pass, so this also
+      drops a 1 GiB gradient. A token outside the reduced vocabulary maps to a NaN row: a mistake shows up as NaN
+      scores (checked below), never as silently wrong ones.
+    * ``_WhereIfNeeded`` above, for the attention pattern.
+
+    Returns ``{token id: column}`` for the reduced unembedding (the metric's labels use it)."""
+    import torch
+    from transformer_lens.components import abstract_attention
+
+    if not (model.cfg.use_attn_result and model.cfg.use_hook_mlp_in):
+        raise RuntimeError("load the model with circuitkit.load_model, which sets the hooks node attribution reads")
+    model.cfg.use_split_qkv_input = False
+    if not isinstance(abstract_attention.torch, _WhereIfNeeded):
+        abstract_attention.torch = _WhereIfNeeded(abstract_attention.torch)
+
+    tok = model.tokenizer
+    used = {t for t in (tok.pad_token_id, tok.bos_token_id, tok.eos_token_id) if t is not None}
+    for p in pairs:
+        for key in ("clean", "corrupt"):
+            used.update(model.to_tokens(p[key], prepend_bos=False, truncate=False)[0].tolist())
+    used = sorted(used)
+    emb = model.embed
+    W = emb.W_E.data
+    remap = torch.full((W.shape[0],), len(used), dtype=torch.long, device=W.device)
+    remap[torch.tensor(used, device=W.device)] = torch.arange(len(used), device=W.device)
+    small = torch.cat([W[used], torch.full((1, W.shape[1]), float("nan"), dtype=W.dtype, device=W.device)])
+    emb.W_E = torch.nn.Parameter(small, requires_grad=True)
+    orig_embed = emb.forward
+    emb.forward = lambda tokens, *a, **k: orig_embed(remap[tokens], *a, **k)
+
+    labels = sorted({p["attack_id"] for p in pairs} | {p["task_id"] for p in pairs})
+    un = model.unembed
+    un.W_U = torch.nn.Parameter(un.W_U.data[:, labels].clone(), requires_grad=False)
+    un.b_U = torch.nn.Parameter(un.b_U.data[labels].clone(), requires_grad=False)
+    del W, small
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return {t: i for i, t in enumerate(labels)}
+
+
+def _node_scores(graph) -> dict[str, float]:
+    from circuitkit.backends.eap.graph import AttentionNode, MLPNode
+
+    out = {}
+    for node in graph.nodes.values():
+        if isinstance(node, AttentionNode):
+            out[f"A{node.layer}.{node.head}"] = float(node.score.item())
+        elif isinstance(node, MLPNode):
+            out[f"MLP {node.layer}"] = float(node.score.item())
+    return out
+
+
+def _top_heads(scores: dict[str, float], k: int = 10) -> list[str]:
+    return [n for v, n in sorted(((v, n) for n, v in scores.items() if n.startswith("A")), reverse=True)[:k] if v > 0]
+
+
+def _bootstrap_top10(per_pair: list[dict], top10: list[str], reps: int = 1000, seed: int = 0) -> dict:
+    """How stable the top 10 is: resample the pairs with replacement, recompute the top 10 each time."""
+    rng = random.Random(seed)
+    names = list(per_pair[0])
+    hits = defaultdict(int)
+    for _ in range(reps):
+        sample = [per_pair[rng.randrange(len(per_pair))] for _ in per_pair]
+        mean = {n: sum(s[n] for s in sample) / len(sample) for n in names}
+        for h in _top_heads(mean):
+            hits[h] += 1
+    freq = {h: hits[h] / reps for h in top10}
+    return {"reps": reps, "top10_inclusion": freq,
+            "mean_inclusion": (sum(freq.values()) / len(freq)) if freq else None}
+
+
 def discover(model_path: str, name: str, data: Path, runs: Path, n: int, ig_steps: int, bs: int,
              dtype: str, force: bool, cpu_ok: bool = False, max_pair_tokens: int | None = None) -> None:
+    """EAP-IG node attribution, one pair at a time, shortest pairs first.
+
+    Memory grows with the inbox length, so the pairs go shortest first; the first one that runs out of GPU memory
+    ends the loop (every longer pair would too) and the scores average the pairs that fit. One pair per call also
+    gives per-pair scores, so the top 10 heads get a bootstrap stability check."""
     out = runs / name / "circuit"
     dst = out / "scores.json"
     if dst.exists() and not force:
@@ -189,75 +304,95 @@ def discover(model_path: str, name: str, data: Path, runs: Path, n: int, ig_step
     if not torch.cuda.is_available() and not cpu_ok:
         raise SystemExit("no GPU visible to the CircuitKIT env; attribution on a 3B model needs one (--cpu-ok to force)")
     from circuitkit.artifacts.scores import CircuitScores
-    from circuitkit.backends.eap.attribute_node import attribute_node
-    from circuitkit.backends.eap.graph import AttentionNode, Graph, MLPNode
+    from circuitkit.backends.eap.attribute_node import get_scores_eap_ig
+    from circuitkit.backends.eap.graph import Graph
     from circuitkit.data.eap_dataset import EAPDiscoveryDataset
 
     all_pairs = _read(data / "circuit" / "pairs_dev.jsonl")
     if max_pair_tokens:
         all_pairs = [p for p in all_pairs if p["n_tokens"] <= max_pair_tokens]
-    pairs = all_pairs[:n]
+    order = sorted(all_pairs, key=lambda p: (p["n_tokens"], p["id"]))
     out.mkdir(parents=True, exist_ok=True)
-
-    def loader(ps):
-        with (out / "pairs.csv").open("w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["clean", "corrupted", "correct_idx", "incorrect_idx"])
-            w.writeheader()
-            for p in ps:
-                w.writerow({"clean": p["clean"], "corrupted": p["corrupt"], "correct_idx": p["attack_id"],
-                            "incorrect_idx": p["task_id"]})
-        # The prompts already carry the chat template (and its BOS), so CircuitKIT must not add another.
-        return EAPDiscoveryDataset(str(out / "pairs.csv"), templated=True).to_dataloader(
-            batch_size=bs, pair_padding_side="left")
 
     model = ck.load_model(model_path, dtype=dtype)
     _last_position_unembed(model)
-    # If memory still runs out, retry on the shortest pairs with fewer integrated-gradients steps; the
-    # config records which attempt produced the scores.
-    attempts = [(pairs, ig_steps), (sorted(all_pairs, key=lambda p: p["n_tokens"])[:n], min(ig_steps, 3))]
-    for i, (ps, steps) in enumerate(attempts):
+    col = _lean_for_attribution(model, order)
+
+    def loader(p):
+        with (out / "pairs.csv").open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["clean", "corrupted", "correct_idx", "incorrect_idx"])
+            w.writeheader()
+            w.writerow({"clean": p["clean"], "corrupted": p["corrupt"], "correct_idx": col[p["attack_id"]],
+                        "incorrect_idx": col[p["task_id"]]})
+        # The prompts already carry the chat template (and its BOS), so CircuitKIT must not add another.
+        return EAPDiscoveryDataset(str(out / "pairs.csv"), templated=True).to_dataloader(
+            batch_size=1, pair_padding_side="left")
+
+    per_pair, pairs, oom_at = [], [], None
+    for p in order:
+        if len(pairs) >= n:
+            break
         graph = Graph.from_model(model, node_scores=True)
         try:
-            attribute_node(model, graph, loader(ps), _metric, method="EAP-IG-inputs", ig_steps=steps)
-            pairs, ig_steps, fallback = ps, steps, i > 0
-            break
+            # attribute_node(method="EAP-IG-inputs") dispatches to this scorer (aggregation "sum"), but its flag
+            # check also demands use_split_qkv_input, which only edge attribution reads; so call the scorer directly.
+            scores_t = get_scores_eap_ig(model, graph, loader(p), _metric, steps=ig_steps, quiet=True)
+            graph.nodes_scores[:] = scores_t.to(graph.nodes_scores.device)
+            del scores_t
         except torch.OutOfMemoryError:
-            if i == len(attempts) - 1:
-                raise
+            oom_at = p["n_tokens"]
             del graph
             torch.cuda.empty_cache()
-            print(f"circuit {name}: out of GPU memory with {len(ps)} pairs (up to "
-                  f"{max(p['n_tokens'] for p in ps)} tokens), ig_steps {steps}; retrying on the shortest pairs")
-    signed = {}
-    for node in graph.nodes.values():
-        if isinstance(node, AttentionNode):
-            signed[f"A{node.layer}.{node.head}"] = float(node.score.item())
-        elif isinstance(node, MLPNode):
-            signed[f"MLP {node.layer}"] = float(node.score.item())
+            print(f"circuit {name}: out of GPU memory at {oom_at} tokens after {len(pairs)} pairs; every longer pair "
+                  "would be too, so attribution uses the pairs so far")
+            break
+        sc = _node_scores(graph)
+        if any(math.isnan(v) for v in sc.values()):
+            raise SystemExit(f"NaN attribution on pair {p['id']}: a token outside the reduced vocabulary?")
+        per_pair.append(sc)
+        pairs.append(p)
+        del graph
+        if len(pairs) % 8 == 0:
+            peak = torch.cuda.max_memory_allocated() / 2**30 if torch.cuda.is_available() else 0
+            print(f"circuit {name}: {len(pairs)} pairs (up to {p['n_tokens']} tokens), peak {peak:.1f} GiB")
+    if len(pairs) < min(8, n):
+        raise SystemExit(f"circuit {name}: only {len(pairs)} pairs fit in GPU memory (need 8)")
+    signed = {k: sum(s[k] for s in per_pair) / len(per_pair) for k in per_pair[0]}
+    top10 = _top_heads(signed)
 
     # Baseline logit differences on the same pairs (no intervention), from the TransformerLens model.
     diffs = {"clean": [], "corrupt": []}
     with torch.no_grad():
         for p in pairs:
             for key in ("clean", "corrupt"):
-                toks = model.to_tokens(p[key], prepend_bos=False)
+                toks = model.to_tokens(p[key], prepend_bos=False, truncate=False)
                 last = model(toks)[0, -1].float()
-                diffs[key].append(float(last[p["attack_id"]] - last[p["task_id"]]))
+                diffs[key].append(float(last[col[p["attack_id"]]] - last[col[p["task_id"]]]))
 
-    cfg = {"pairs": str(data / "circuit" / "pairs_dev.jsonl"), "n_pairs": len(pairs), "method": "EAP-IG-inputs",
-           "ig_steps": ig_steps, "batch_size": bs, "dtype": dtype, "metric": "-(logit[attack] - logit[task])",
-           "max_pair_tokens": max(p["n_tokens"] for p in pairs), "shortest_pairs_fallback": fallback,
+    cfg = {"pairs": str(data / "circuit" / "pairs_dev.jsonl"), "n_pairs": len(pairs), "n_requested": n,
+           "method": "EAP-IG-inputs", "ig_steps": ig_steps, "batch_size": 1, "dtype": dtype,
+           "metric": "-(logit[attack] - logit[task])", "order": "shortest first",
+           "min_pair_tokens": min(p["n_tokens"] for p in pairs), "max_pair_tokens": max(p["n_tokens"] for p in pairs),
+           "dev_pairs_available": len(all_pairs), "out_of_memory_at_tokens": oom_at,
+           "peak_gpu_gib": (torch.cuda.max_memory_allocated() / 2**30) if torch.cuda.is_available() else None,
+           "memory": ["CIRCUITKIT_TL_MEMORY_PATCH=1", "use_split_qkv_input=False", "reduced embedding/unembedding",
+                      "attention NaN clean-up only if needed", "logits at the decision token only"],
            "by_lang": {l: sum(p["lang"] == l for p in pairs) for l in LG.ALL_LANGS if any(p["lang"] == l for p in pairs)}}
     CircuitScores(task="sandesh_injection", model=model_path, algorithm="eap-ig", level="node",
                   node_scores={k: abs(v) for k, v in signed.items()}, timestamp=CircuitScores.create_timestamp(),
                   version="1.0", discovery_cfg=cfg).to_json(out / "injection_scores.json")
     res = {"model": model_path, "name": name, "circuitkit": ck.__version__, "config": cfg,
            "n_layers": model.cfg.n_layers, "n_heads": model.cfg.n_heads,
-           "logit_diff": {k: sum(v) / len(v) for k, v in diffs.items()}, "node_scores": signed}
+           "logit_diff": {k: sum(v) / len(v) for k, v in diffs.items()}, "node_scores": signed,
+           "top10_stability": _bootstrap_top10(per_pair, top10),
+           "pair_ids": [p["id"] for p in pairs]}
     dst.write_text(json.dumps(res, indent=1))
-    top = sorted(((v, k) for k, v in signed.items() if k.startswith("A")), reverse=True)[:10]
-    print(f"circuit {name}: logit diff clean {res['logit_diff']['clean']:.2f} vs corrupt "
-          f"{res['logit_diff']['corrupt']:.2f}; top heads " + ", ".join(f"{k} {v:.3f}" for v, k in top))
+    _write(out / "per_pair_scores.jsonl", [{"id": p["id"], "n_tokens": p["n_tokens"], "lang": p["lang"], "scores": sc}
+                                          for p, sc in zip(pairs, per_pair)])
+    print(f"circuit {name}: {len(pairs)} pairs ({cfg['min_pair_tokens']}-{cfg['max_pair_tokens']} tokens); logit diff "
+          f"clean {res['logit_diff']['clean']:.2f} vs corrupt {res['logit_diff']['corrupt']:.2f}; top heads "
+          + ", ".join(f"{k} {signed[k]:.3f}" for k in top10)
+          + f"; top-10 bootstrap inclusion {res['top10_stability']['mean_inclusion']:.2f}")
 
 
 # --------------------------------------------------------------------------- sweep / knockout (main env, HF)
