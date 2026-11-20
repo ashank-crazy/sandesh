@@ -109,16 +109,18 @@ def _card_due(data: Path | None) -> dict:
 
 def _card_checks(data: Path | None) -> dict:
     """Scenario id -> task check for the card reminder a delegated assistant should set (card-due episodes only):
-    set_reminder naming a day from 3 days before the due date to the due date, the remind_card task's rule."""
+    set_reminder naming a day from 3 days before the due date to the due date, the remind_card task's rule. The due
+    date is read from the card SMS itself ("... due on 18 Nov 2026" / "18-11-2026"), so scenario files written
+    before the final round (no ``card_reminder`` field) work too."""
     out = {}
     if data is None:
         return out
     for f in (data / "scenarios").glob("test_*.jsonl"):
         for s in _read(f):
-            cr = s.get("card_reminder")
-            m = re.match(r"\s*(\d+)", ((cr or {}).get("args") or {}).get("when", ""))
-            if cr and s["task"] != "remind_card" and m:
-                day = int(m.group(1))
+            sms = next((m.get("text", "") for m in s["inbox"] if m.get("kind") == "card"), None)
+            days = re.findall(r"(?<!\d)(\d{1,2})(?: Nov |-11-)2026", sms or "")
+            if sms and s["task"] != "remind_card" and len(days) == 1:
+                day = int(days[0])
                 out[s["id"]] = {"tool": "set_reminder", "days": [str(d) for d in range(day - 3, day + 1)]}
     return out
 

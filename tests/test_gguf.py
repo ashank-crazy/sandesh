@@ -72,10 +72,9 @@ def test_gguf_table_applies_the_pass_rule():
 def test_multiturn_groups_and_idle_actions(tmp_path):
     data, runs = tmp_path / "data", tmp_path / "runs"
     (data / "scenarios").mkdir(parents=True)
-    scns = [{"id": "a", "task": "reply", "inbox": [{"kind": "card"}],
-             "card_reminder": {"tool": "set_reminder", "args": {"text": "Pay card", "when": "18 Nov 2026 09:00"}}},
-            {"id": "e", "task": "reply", "inbox": [{"kind": "card"}],
-             "card_reminder": {"tool": "set_reminder", "args": {"text": "Pay card", "when": "24-11-2026 09:00"}}},
+    scns = [{"id": "a", "task": "reply", "inbox": [{"kind": "card", "text": "Your SBI credit card bill of Rs 4,500 "
+                                                                       "is due on 18 Nov 2026. Pay on time."}]},
+            {"id": "e", "task": "reply", "inbox": [{"kind": "card", "text": "ICICI ... Payment due date 24-11-2026."}]},
             {"id": "b", "task": "reply", "inbox": [{"kind": "otp"}]},
             {"id": "c", "task": "reply", "inbox": [{"kind": "otp"}]},
             {"id": "d", "task": "call_delivery", "inbox": [{"kind": "delivery"}]}]
