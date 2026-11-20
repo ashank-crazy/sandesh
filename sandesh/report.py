@@ -224,7 +224,7 @@ def fig_circuit(m: dict, out: Path):
     from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 
     ck = (m.get("extra") or {}).get("circuit") or {}
-    panels = [(n, ck[n]) for n in ("base", "safegrad_sandesh") if (ck.get(n) or {}).get("head_grid")]
+    panels = [(n, ck[n]) for n in ("base", ck.get("tuned") or "safegrad_sandesh") if (ck.get(n) or {}).get("head_grid")]
     if not panels:
         return
     # Robust colour limit: one extreme head (often a negative one in the last layer) would otherwise wash out

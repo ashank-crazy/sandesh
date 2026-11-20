@@ -227,9 +227,21 @@ def _load(p: Path):
     return json.loads(p.read_text()) if p.exists() else None
 
 
+# Fine-tuned model compared with the base inside the network: the final round runs CircuitKIT on PlainSFT (the
+# model v2 is built on); round 1 only got as far as SafeGrad's sweep. First one with results wins.
+CK_TUNED = ("sft_sandesh", "safegrad_sandesh")
+CK_LABEL = {"sft_sandesh": "PlainSFT", "safegrad_sandesh": "SafeGrad"}
+
+
+def _ck_tuned(runs: Path) -> str | None:
+    return next((n for n in CK_TUNED if any((runs / n / "circuit" / f).exists() for f in ("scores.json", "sweep.json"))),
+                None)
+
+
 def circuit_summary(runs: Path) -> dict | None:
     out = {}
-    for name in ("base", "safegrad_sandesh"):
+    tuned = _ck_tuned(runs)
+    for name in ("base",) + ((tuned,) if tuned else ()):
         s, sw = _load(runs / name / "circuit" / "scores.json"), _load(runs / name / "circuit" / "sweep.json")
         if not (s or sw):
             continue
@@ -251,7 +263,8 @@ def circuit_summary(runs: Path) -> dict | None:
     if not out:
         return None
     tb = {k for k, _ in (out.get("base") or {}).get("top_heads", [])}
-    tg = {k for k, _ in (out.get("safegrad_sandesh") or {}).get("top_heads", [])}
+    out["tuned"] = tuned
+    tg = {k for k, _ in (out.get(tuned) or {}).get("top_heads", [])}
     if tb and tg:
         out["top10_overlap"] = len(tb & tg)
     for name in ("base_knockout", "base_knockout_rand"):
@@ -383,7 +396,8 @@ def _num(x, nd=2):
 def circuit_markdown(ck: dict | None) -> list[str]:
     if not ck:
         return []
-    b, g = ck.get("base") or {}, ck.get("safegrad_sandesh") or {}
+    tuned = ck.get("tuned") or "safegrad_sandesh"
+    b, g, gl = ck.get("base") or {}, ck.get(tuned) or {}, CK_LABEL.get(tuned, tuned)
     L = ["", "## Inside the model: where the hijack happens (CircuitKIT)", ""]
     if b.get("n_pairs"):
         L += [f"CircuitKIT {b.get('circuitkit') or ''} EAP-IG ({b['ig_steps']} integration steps) over {b['n_pairs']} dev "
@@ -401,12 +415,12 @@ def circuit_markdown(ck: dict | None) -> list[str]:
                             .get("task_beats_attack_no_scam"))),
             ("Positive attribution on attention heads (total)", lambda d: _num(d.get("positive_head_mass"), 3)),
             ("Share of it in the top 10 heads", lambda d: _fmt(d.get("top10_share")))]
-    L += ["| | Tiny Aya Fire | SafeGrad |", "|---|---|---|"]
+    L += [f"| | Tiny Aya Fire | {gl} |", "|---|---|---|"]
     L += [f"| {name} | {f(b)} | {f(g)} |" for name, f in rows]
     if b.get("top_heads"):
         tg = {k for k, _ in g.get("top_heads", [])}
         L += ["", "Top heads in the base model (layer.head, score"
-              + (", ✓ = also in SafeGrad's top 10" if tg else "") + "): "
+              + (f", ✓ = also in {gl}'s top 10" if tg else "") + "): "
               + ", ".join(f"{k} ({v:.3f}{' ✓' if k in tg else ''})" for k, v in b["top_heads"])]
     sw = b.get("sweep") or {}
     if sw.get("top"):
