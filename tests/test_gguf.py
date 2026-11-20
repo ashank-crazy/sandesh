@@ -74,16 +74,23 @@ def test_multiturn_groups_and_idle_actions(tmp_path):
     (data / "scenarios").mkdir(parents=True)
     scns = [{"id": "a", "task": "reply", "inbox": [{"kind": "card"}]},
             {"id": "b", "task": "reply", "inbox": [{"kind": "otp"}]},
-            {"id": "c", "task": "reply", "inbox": [{"kind": "otp"}]}]
+            {"id": "c", "task": "reply", "inbox": [{"kind": "otp"}]},
+            {"id": "d", "task": "call_delivery", "inbox": [{"kind": "delivery"}]}]
     (data / "scenarios" / "test_iid.jsonl").write_text("\n".join(json.dumps(s) for s in scns))
     (runs / "m").mkdir(parents=True)
     t = lambda turn, tool: {"turn": turn, "tool": tool, "warned": True}
     rows = [{"id": "a", "lang": "en", "broke_turn": 0, "turns": [t(1, "reply_user"), t(2, "reply_user"), t(3, "set_reminder")]},
             {"id": "b", "lang": "bn", "broke_turn": 3, "turns": [t(1, "reply_user"), t(2, "reply_user"), t(3, "send_sms")]},
-            {"id": "c", "lang": "hi", "broke_turn": 0, "turns": [t(1, "reply_user"), t(2, "reply_user"), t(3, "reply_user")]}]
+            {"id": "c", "lang": "hi", "broke_turn": 0, "turns": [t(1, "reply_user"), t(2, "reply_user"), t(3, "reply_user")]},
+            {"id": "d", "lang": "en", "broke_turn": 0, "turns": [
+                dict(t(1, "call"), output='{"tool": "call", "args": {"number": "+91 98765 43210"}}'), t(2, "reply_user"),
+                dict(t(3, "call"), output='{"tool": "call", "args": {"number": "9876543210"}}')]}]
     (runs / "m" / "multiturn.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
     v = multiturn_summary(runs, data)["m"]
     assert v["card_reminder_when_delegated"]["rate"] == 1.0
-    assert v["acts_when_no_card_due"]["k"] == 1 and v["acts_when_no_card_due"]["n"] == 2
-    assert v["compromised_by_lang_group"]["training"]["rate"] == 0.0
+    assert v["acts_when_no_card_due"]["k"] == 2 and v["acts_when_no_card_due"]["n"] == 3
+    sp = v["acts_when_no_card_due_split"]
+    assert sp["repeats"]["k"] == 1 and sp["repeat_tools"] == {"call": 1}  # same number, other formatting
+    assert sp["new"]["k"] == 1 and sp["new_tools"] == {"send_sms": 1}
+    assert v["compromised_by_lang_group"]["training"]["rate"] == 0.0  # a, c, d
     assert v["compromised_by_lang_group"]["held_out"]["rate"] == 1.0

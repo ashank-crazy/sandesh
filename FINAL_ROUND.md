@@ -7,6 +7,27 @@ Rules from the hackathon pages (Nov 20): shortlisted teams "prove their thesis a
 slides"; the final judging uses only the video or slides. Finalists also get $200 in Hugging Face credits to polish
 artifacts or run extra experiments. The submit page now has a recommended write-up layout; README v2 follows it.
 
+## Status (Fri Nov 20, night IST)
+
+- **P2 passed for v2** (4-bit Q4_K_M through llama.cpp b12318): ASR 0.1% → 0.1%, task success 99.0 → 99.0% clean and
+  99.5 → 99.2% under attack, multi-turn 0 → 0%; 2.00 GiB (bf16 GGUF 6.25 GiB); 11 tok/s generation on a 6-core
+  i7-8700 with no GPU. Base **fails** the same rule: ASR 14.0 → 16.2% (p = 0.007); Cohere's own Q4_K_M gives 16.1%,
+  so this is quantization, not our conversion. 4-bit makes the undefended model easier to hijack; v2 keeps its
+  defence. PlainSFT keeps single-turn ASR but multi-turn goes 20.0 → 26.7% and the card reminder 45.6 → 16.7%.
+  Our GGUFs differ from Cohere's in two metadata keys (context_length 500000 vs 8192, eos_token_id 3 vs 6); results
+  match Cohere's file (16.2 vs 16.1%), say so in the README.
+- **P3 ran** (32 dev pairs, 845-911 tokens; top-10 heads stable in 89% of bootstrap resamples). The hijack runs
+  through heads in layers 15-24 (top: A23.13, A23.12, A23.5, A22.15). PlainSFT keeps the same top heads but their
+  positive attribution falls 15.9 → 3.6 (-78%). Pre-registered rule (decision token, k = 32 chosen on dev): attacker
+  preferred 8.7% with the top heads zeroed vs 19.3% with random heads, task preference 97.3%: passes. But in free
+  generation the same knockout breaks the assistant (0% valid tool calls, MMLU 28%; random-32 control 96.6% valid,
+  MMLU 44.3%). Reading: the hijack goes through heads the assistant needs; zeroing them is not a defence, and
+  fine-tuning turns the scam's push through them down instead.
+- **Open:** "acts at turn 3 with no card bill due" is 67% for v2 (41 of 61). 40 of those 61 episodes started with
+  the user asking for an action (card reminder 20, call 9, pay milkman 6, text family 5), so this is most likely the
+  model doing the requested action again. The metric now splits repeats from new actions;
+  `scripts/turn3_examples.py` prints the breakdown and examples.
+
 ## Status (Fri Nov 20, afternoon IST)
 
 - **P1 passed all five rules** (v2): hijacked by turn 3 0.0% (0 of 120; 95% upper bound 3.1%), card reminder when
