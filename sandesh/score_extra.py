@@ -394,6 +394,52 @@ def gguf_markdown(metrics: dict, ex: dict) -> list[str]:
     return L
 
 
+SEED_FAMILIES = [("sft_sandesh", "PlainSFT"), ("sft_v2", "v2 (multi-turn patch)"), ("sft_v21", "v2.1")]
+
+
+def seeds_markdown(metrics: dict, ex: dict) -> list[str]:
+    """Seed 13 (the runs reported above) next to seeds 14 and 15, with the mean and range, per model family."""
+    C, mt = metrics["conditions"], ex.get("multiturn") or {}
+
+    def r(c, *keys):
+        d = C.get(c) or {}
+        for k in keys:
+            d = (d or {}).get(k) or {}
+        return d.get("rate") if isinstance(d, dict) else None
+
+    def m(c, key, sub=None):
+        v = (mt.get(c) or {}).get(key) or {}
+        if sub is not None:
+            v = v.get(sub) or v.get(str(sub)) or {}
+        return v.get("rate") if isinstance(v, dict) else None
+
+    cols = [("Attack success, all test splits", lambda c: r(c, "all", "asr")),
+            ("Task success, clean", lambda c: r(c, "all", "success_clean")),
+            ("Task success, under attack", lambda c: r(c, "all", "success_under_attack")),
+            ("Hijacked by turn 3", lambda c: m(c, "compromised_by_turn", 3)),
+            ("Turn 3, no card bill due: acts", lambda c: m(c, "acts_when_no_card_due")),
+            ("Card reminder, right date", lambda c: m(c, "card_reminder_right_date_when_delegated"))]
+    L = []
+    for fam, label in SEED_FAMILIES:
+        names = [n for n in (fam, f"{fam}_s14", f"{fam}_s15") if n in C]
+        if fam not in C or len(names) < 2:
+            continue
+        use = [(h, f) for h, f in cols if any(f(n) is not None for n in names)]
+        if not L:
+            L += ["", "## Not luck: training seeds", "",
+                  "Seed 13 is the run reported everywhere above. Seeds 14 and 15 repeat the training with everything else "
+                  "fixed (for v2 and v2.1: the same patch data on the same parent model, only the patch's seed changes)."]
+        L += ["", f"**{label}**", "", "| Seed | " + " | ".join(h for h, _ in use) + " |", "|---|" + "---|" * len(use)]
+        for n in names:
+            L.append(f"| {13 if n == fam else n.rsplit('_s', 1)[1]} | " + " | ".join(_fmt(f(n)) for _, f in use) + " |")
+        cells = []
+        for _, f in use:
+            v = [f(n) for n in names if f(n) is not None]
+            cells.append(f"{_fmt(sum(v) / len(v))} ({_fmt(min(v))}–{_fmt(max(v))})" if v else "–")
+        L.append("| mean (range) | " + " | ".join(cells) + " |")
+    return L
+
+
 def circuit_summary(runs: Path) -> dict | None:
     out = {}
     tuned = _ck_tuned(runs)
@@ -542,6 +588,7 @@ def markdown(metrics: dict, conds: list[str]) -> list[str]:
             L.append(f"| {_label(c)} | {ci(g.get('training'))} | {ci(g.get('held_out'))} | "
                      f"{ci(cb.get(3) or cb.get('3'))} | {_idle_cell(v, 'repeats')} | {_idle_cell(v, 'new')} |")
     L += gguf_markdown(metrics, ex)
+    L += seeds_markdown(metrics, ex)
     det = ex.get("detectors") or {}
     if det:
         langs = [l for l in LANG_ORDER if any(l in v["recall_by_lang"] for v in det.values())]

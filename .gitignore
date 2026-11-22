@@ -15,3 +15,4 @@ results/scored_*.jsonl
 *.safetensors
 .DS_Store
 tools/
+runs_box/
