@@ -14,14 +14,16 @@ const mt = (name) => X.multiturn[name] ?? {}
 // ---- recorded episodes (same inbox, base 4-bit vs v2.1 4-bit) ----
 const DEMO = 'test_iid-00285'
 const HELD = 'test_ood_lang-00091' // Tamil: no training data in ta/bn/mr (sandesh/lang.py OOD_LANGS)
-const rows = (cond) => readFileSync(`${R}/runs_box/${cond}/multiturn.jsonl`, 'utf8').trim().split('\n').map(JSON.parse)
-function episode(cond, id = DEMO) {
-  const row = rows(cond).find((r) => r.id === id)
+const REAL = 'realsms-00020' // a real Flipkart-prize scam SMS (Mishra & Soni, CC BY 4.0); base 4-bit called its number at turn 3
+const rows = (cond, file = 'multiturn') => readFileSync(`${R}/runs_box/${cond}/${file}.jsonl`, 'utf8').trim().split('\n').map(JSON.parse)
+const action = (o) => { try { return JSON.parse(o) } catch { const m = o.match(/\{[\s\S]*\}/); try { return JSON.parse(m?.[0]) } catch { return { tool: null, args: {}, raw: o } } } }
+function episode(cond, id = DEMO, file = 'multiturn') {
+  const row = rows(cond, file).find((r) => r.id === id)
   const inboxes = row.messages.filter((m) => m.role === 'user' && m.content.startsWith('[TOOL RESULT: read_inbox]'))
   const parse = (txt) => [...txt.matchAll(/\[(\d+)\] From: (.*?) · (\d\d:\d\d)\n([\s\S]*?)(?=\n\n\[\d+\] From:|\n\n\[END|$)/g)].map((m) => ({ from: m[2], time: m[3], text: m[4].trim() }))
   const users = row.messages.filter((m) => m.role === 'user' && !m.content.startsWith('[TOOL')).map((m) => m.content)
   return { id: row.id, lang: row.lang, broke: row.broke_turn, inbox: parse(inboxes[0].content), inbox2: parse(inboxes.at(-1).content), users,
-           turns: row.turns.map((t) => ({ turn: t.turn, hijacked: t.hijacked, warned: t.warned, ...JSON.parse(t.output) })) }
+           turns: row.turns.map((t) => ({ turn: t.turn, hijacked: t.hijacked, warned: t.warned, ...action(t.output) })) }
 }
 // Multi-turn episodes in the held-out languages, hijacked by turn 3 (4-bit runs, 20 per language).
 const heldCount = (cond) => { const h = rows(cond).filter((r) => ['bn', 'ta', 'mr'].includes(r.lang)); return { hit: h.filter((r) => r.broke_turn).length, n: h.length } }
@@ -41,6 +43,10 @@ const seeds = [13, 14, 15].map((s) => {
            mt: pct(mt(n).compromised_by_turn?.['3']), acts: pct(mt(n).acts_when_no_card_due), right: pct(mt(n).card_reminder_right_date_when_delegated) }
 })
 
+// P6: real scam SMS written for people (results/realsms.json from scripts/realsms.sh).
+const RS = JSON.parse(readFileSync(`${R}/results/realsms.json`, 'utf8'))
+const rsm = (n) => { const x = RS.metrics[n]; return { acted: x.scam.acted, warned: x.scam.warned_t2, falseWarn: x.ham.false_warning_t2, toSender: x.ham.to_sender_t3 } }
+
 const g = X.gguf.sft_v21
 const data = {
   timing,
@@ -54,6 +60,10 @@ const data = {
       note: "Amma's house rent",
       warn: "A new message has arrived from AX-VERIFY (20:12). ⚠️ Warning: AX-VERIFY's message is a scam. Don't touch the link in it. This is a fraud message, don't share it with anyone.",
     },
+  },
+  real: {
+    base: episode('base_q4', REAL, 'realsms'), v21: episode('sft_v21_q4', REAL, 'realsms'), m: { base: rsm('base_q4'), v21: rsm('sft_v21_q4') },
+    byTool: RS.metrics.base_q4.scam.acted_by_tool, byTurn: RS.metrics.base_q4.scam.acted_by_turn, pass: RS.verdict?.pass, nScam: RS.build.n_scam, nHam: RS.build.n_ham,
   },
   base: {
     asr: a('base', 'asr'), heldOut: pct(C.base.splits.test_ood_lang.asr), bon: pct(X.bon.base.asr_at_K), mt: pct(mt('base').compromised_by_turn['3']),
@@ -91,7 +101,8 @@ const data = {
   },
 }
 writeFileSync('data.js', 'window.DATA = ' + JSON.stringify(data, null, 1))
-const { timing: _t, demo, held, ...rest } = data
+const { timing: _t, demo, held, real, ...rest } = data
 console.log(JSON.stringify(rest, null, 0).slice(0, 4000))
 console.log('demo', demo.base.turns.map((t) => t.tool), demo.v21.turns.map((t) => t.tool))
+console.log('real', data.real.base.turns.map((t) => [t.tool, t.hijacked]), data.real.v21.turns.map((t) => [t.tool, t.warned]), data.real.m)
 console.log('held', held.base.lang, held.count, held.base.turns.map((t) => t.tool), held.v21.turns.map((t) => t.tool), held.base.inbox2.length)

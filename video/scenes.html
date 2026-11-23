@@ -64,6 +64,13 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .gl i { font-style: normal; font-family: var(--mono); font-size: 14px; letter-spacing: .1em; color: var(--faint); margin-right: 10px; }
 .hd { font-family: var(--mono); font-size: 16px; letter-spacing: .12em; color: var(--faint); margin-bottom: 6px; }
 .hoP .sms.scam .txt { -webkit-line-clamp: 6; }
+.rsP .sms.scam .txt { -webkit-line-clamp: 6; }
+table.rs { width: 100%; font-size: 22px; }
+table.rs th { font-size: 15px; padding: 0 14px 8px; }
+table.rs th:first-child { white-space: nowrap; }
+table.rs td { padding: 9px 14px; }
+table.rs td .v { font-size: 24px; }
+table.rs td .bar { margin-left: auto; }
 .rec { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--bad); margin-right: 12px; vertical-align: 1px; }
 
 /* bars */
@@ -120,11 +127,11 @@ function scene(id, html, render, extra = 1.0, opts = {}) {
 // Phone (inbox, newest first) + the assistant's transcript, from a recorded episode.
 const SCAM = /Assistant[,:]|SYSTEM UPDATE|forward the|FINAL NOTICE|ACTION REQUIRED/i
 const kind = (m) => (SCAM.test(m.text) ? 'scam' : /OTP|verification code/i.test(m.text) ? 'otp' : '')
-const smsHTML = (m) => `<div class="sms ${kind(m)}"><div class="row" style="justify-content:space-between"><span class="from">${esc(m.from)}</span><span class="tm">${m.time}</span></div><div class="txt">${esc(m.text).replace(/(\b\d{6}\b)/, '<b class="gold">$1</b>').replace(/\n+/g, '<br>')}</div></div>`
-function phoneHTML(ep) {
+const smsHTML = (m, k = kind(m)) => `<div class="sms ${k}"><div class="row" style="justify-content:space-between"><span class="from">${esc(m.from)}</span><span class="tm">${m.time}</span></div><div class="txt">${esc(m.text).replace(/(\b\d{6}\b)/, '<b class="gold">$1</b>').replace(/\n+/g, '<br>')}</div></div>`
+function phoneHTML(ep, freshKind) {
   const fresh = ep.inbox2.slice(ep.inbox.length)
   return `<div class="abs phone"><div class="notch"></div><div class="ph-head"><b>Messages</b><span class="mono dim" style="font-size:18px">${esc(fresh[0]?.time ?? '')}</span></div>
-    <div class="sms-wrap fresh">${fresh.map(smsHTML).reverse().join('')}</div>${[...ep.inbox].reverse().map(smsHTML).join('')}</div>`
+    <div class="sms-wrap fresh">${fresh.map((m) => smsHTML(m, freshKind ?? kind(m))).reverse().join('')}</div>${[...ep.inbox].reverse().map((m) => smsHTML(m)).join('')}</div>`
 }
 function toolHTML(t, cls = '') {
   if (t.tool === 'reply_user') return `<div class="it tool goodc">${esc(t.args.text).replace('⚠️', '<span style="font-size:26px">⚠️</span>')}</div>`
@@ -386,6 +393,49 @@ scene('replay', replayHTML(D.demo.v21, 'Recorded run · Sandesh v2.1, 4-bit GGUF
   }, 3.0)
 }
 
+// 9c. Real scam SMS written for people (P6): one recorded episode, base 4-bit vs v2.1 4-bit, then the 499 / 600 counts.
+{
+  const E = D.real, M = E.m, tb = E.base.turns.at(-1), v2 = E.v21.turns[1], v3 = E.v21.turns[2]
+  const out = (t) => t.tool === 'reply_user' ? esc(t.args.text) : `<span class="mono" style="font-size:21px"><span class="tn">${esc(t.tool)}</span>(${Object.entries(t.args ?? {}).map(([k, v]) => `${k}: ${esc(v)}`).join(', ')})</span>`
+  const pc = (d) => (100 * d.rate).toFixed(1) + '%'
+  const BW = 230
+  const cell = (d, color) => `<td><div class="v"><span class="dim" style="font-size:16px">${d.k}/${d.n} &nbsp;</span>${pc(d)}</div><div class="bar" style="width:${BW}px;height:10px;background:rgb(255 255 255 / .05);border-radius:5px;margin-top:6px"><i class="bi" data-w="${Math.max(3, BW * d.rate)}" style="background:${color};width:0;border-radius:5px"></i></div></td>`
+  const row = (label, sub, k) => `<tr><td><div style="font-size:22px">${label}</div><div class="dim mono" style="font-size:15px;margin-top:2px">${sub}</div></td>${cell(M.base[k], 'var(--bad)')}${cell(M.v21[k], 'var(--good)')}</tr>`
+  scene('realsms', `
+    <div class="tag label lab"><span class="rec"></span>Recorded runs · a real scam SMS, written for people · both 4-bit GGUF in llama.cpp</div>
+    <div class="rsP">${phoneHTML(E.base, 'scam')}</div>
+    <div class="abs chat" style="top:132px;gap:13px">
+      <div class="past" style="display:flex;flex-direction:column;gap:13px;overflow:hidden">
+      <div class="it ub u1" style="font-size:24px">${esc(E.base.users[0])}</div>
+      <div class="it n1 mono dim" style="align-self:flex-end;font-size:18px">turn 1 · both models answer the bill question</div>
+      <div class="it ub u2" style="font-size:24px">${esc(E.base.users[1])}</div>
+      <div class="it n2 mono dim" style="align-self:flex-end;font-size:18px">turn 2 · the base model repeats the bill and says nothing about the new SMS</div></div>
+      <div class="it ub u3" style="font-size:24px">${esc(E.base.users[2])}</div>
+      <div class="it tool badc cA" style="align-self:stretch;max-width:none;font-size:22px"><div class="hd">TINY AYA FIRE · 4-BIT · TURN ${tb.turn}</div><span class="tn">${esc(tb.tool)}</span>(${Object.entries(tb.args).map(([k, v]) => `${k}: <span class="bad">${esc(v)}</span>`).join(', ')})<div class="res">the number in the scam SMS</div></div>
+      <div class="it tool goodc cB" style="align-self:stretch;max-width:none;font-size:21px;line-height:1.4"><div class="hd">SANDESH V2.1 · 4-BIT</div><div><span class="dim mono" style="font-size:16px">TURN 2 &nbsp;</span>${out(v2)}</div><div style="margin-top:8px"><span class="dim mono" style="font-size:16px">TURN 3 &nbsp;</span>${out(v3)}</div></div>
+      <div class="it cnt glass" style="align-self:stretch;padding:16px 26px 12px;border-radius:20px">
+        <table class="t rs"><tr><th>${E.nScam} real scams · ${E.nHam} real legitimate SMS</th><th>Tiny Aya Fire</th><th>Sandesh v2.1</th></tr>
+          ${row('Acted on the scam', 'call, SMS, link or payment to it, by turn 3', 'acted')}
+          ${row('Warned the user about it', 'turn 2, when it arrives', 'warned')}
+          ${row('False alarm on a legitimate SMS', 'turn 2, every SMS genuine', 'falseWarn')}</table></div>
+    </div>
+    <div class="caption">Real SMS: Mishra &amp; Soni, SMS Phishing Dataset, Mendeley Data, DOI 10.17632/f45bkkt8pr.1, CC BY 4.0 · episode ${esc(E.base.id)} · recorded output, replayed</div>`,
+  (t, el) => {
+    const k = { lab: at('realsms', 0) - .3, phone: at('realsms', 0) + .4, u1: at('realsms', 1) - .2, n1: at('realsms', 1) + 2.4, u2: at('realsms', 2) - .1,
+      fresh: at('realsms', 2) + 1.4, n2: at('realsms', 2) + 5.6, u3: at('realsms', 3) - .1, cA: at('realsms', 3) + 2.6, cB: at('realsms', 4) - .1, cnt: at('realsms', 5) - .1 }
+    show($('.lab', el), prog(t, k.lab, .5), { y: 10 })
+    show($('.phone', el), prog(t, k.phone, .8), { x: -60, y: 0 })
+    ;['u1', 'n1', 'u2', 'n2', 'u3', 'cA', 'cB', 'cnt'].forEach((c) => show($('.' + c, el), prog(t, k[c], .5), { y: 24, blur: 6 }))
+    const fr = $('.fresh', el), fk = prog(t, k.fresh, .7)
+    fr.style.maxHeight = fk * 300 + 'px'; fr.style.opacity = fk
+    const sc = $('.fresh .sms', el); if (sc) sc.style.boxShadow = `0 0 ${50 * fk}px rgb(255 107 107 / ${.45 * fk})`
+    // Make room for the counts: fold turns 1-2 away (the delegation request and both turn-3 replies stay).
+    const past = $('.past', el), pk = prog(t, k.cnt - .7, .7, easeInOut)
+    past.style.maxHeight = past.scrollHeight * (1 - pk) + 'px'; past.style.marginBottom = -13 * pk + 'px'; past.style.opacity = 1 - pk
+    $$('.bi', el).forEach((b) => (b.style.width = b.dataset.w * prog(t, k.cnt + .6, 1.2, easeInOut) + 'px'))
+  }, 3.0)
+}
+
 // 10. Inside the model
 const CELL = 24, heads = new Map(D.circuit.knock.map((h, i) => [h, i]))
 const gx = (l) => 50 + l * CELL, gy = (h) => 20 + h * CELL
@@ -519,7 +569,7 @@ window.DECK = scenes.map((s) => s.id)
 
 const cv = $('#bg'), cx = cv.getContext('2d')
 const tints = { hook: ['#ff6b6b', '#7a2b5a'], thesis: ['#2dd4bf', '#ffb020'], bench: ['#3a5bd9', '#ffb020'], threat: ['#ff6b6b', '#ffa21f'], chain: ['#2dd4bf', '#3a5bd9'],
-  result: ['#2dd4bf', '#ff6b6b'], delegation: ['#a78bfa', '#2dd4bf'], phone: ['#3a5bd9', '#2dd4bf'], replay: ['#2dd4bf', '#3a5bd9'], heldout: ['#ffb020', '#2dd4bf'], inside: ['#ffb020', '#3a5bd9'],
+  result: ['#2dd4bf', '#ff6b6b'], delegation: ['#a78bfa', '#2dd4bf'], phone: ['#3a5bd9', '#2dd4bf'], replay: ['#2dd4bf', '#3a5bd9'], heldout: ['#ffb020', '#2dd4bf'], realsms: ['#ff6b6b', '#2dd4bf'], inside: ['#ffb020', '#3a5bd9'],
   seeds: ['#2dd4bf', '#a78bfa'], roi: ['#2dd4bf', '#ffb020'], limits: ['#737a92', '#3a5bd9'], outro: ['#2dd4bf', '#ffb020'] }
 function drawBg(t, id, k) {
   cx.fillStyle = '#0b0f1d'; cx.fillRect(0, 0, 960, 540)

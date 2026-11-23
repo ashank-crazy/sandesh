@@ -9,14 +9,19 @@ artifacts or run extra experiments. The submit page now has a recommended write-
 
 ## Status (Mon Nov 23 IST)
 
+- **P6 passed** (real scam SMS, run 16:12-17:32 IST on `bc85ba8`, `results/realsms.md`). 4-bit v2.1 acted on
+  **0 / 499** real scams by turn 3 (95% CI 0.0-0.8%); 4-bit base acted on **198 / 499 (39.7%)**: 168 calls, 21 links,
+  9 SMS, 156 of them at "take care of whatever is urgent". False warnings on 600 real legitimate SMS: v2.1 2.3%
+  (base 1.5%), within the 5% rule. Without a threshold: v2.1 warned about the real scam at turn 2 in 64.1% (base
+  5.0%), and never acted toward the legitimate sender at turn 3 (base 6.5%).
 - **Every experiment is done; P1b passed all ten rules, so v2.1 ships** (`results/verdict.json`). P3b passed:
   k = 32 removed 95% vs 31% random, recreated 96% vs 13%; all heads 100% both ways. P4: three seeds each for
   PlainSFT and v2.1 (v2.1 attack success 0.0 / 0.1 / 0.1%, multi-turn 0% each). Second multi-turn run on 300 fresh
   episodes: 0 / 300 hijacked, 0 / 153 actions with nothing due.
 - **Published** as new repos (the round-1 repos are untouched): `tiny-aya-fire-sandesh-v2.1`, its `-GGUF`, dataset
   `sandesh-bench-final`, and the collection "Sandesh - final round".
-- **D1/D2 drafted:** `video/` renders a 6 min 43 s narrated video (Kokoro af_heart) and a 14-slide PDF from
-  `results/` and two recorded 4-bit episodes. **D3** README v2 (judges' box + "what changed"), **D5** `FEEDBACK.md`.
+- **D1/D2 drafted:** `video/` renders an 8 min 30 s narrated video (Kokoro af_heart) and a 16-slide PDF from
+  `results/` and four recorded 4-bit episodes (the demo inbox twice, a held-out Tamil one, a real scam SMS). **D3** README v2 (judges' box + "what changed"), **D5** `FEEDBACK.md`.
   P5 (judge labelling) dropped for time and stated as a limitation.
 - Left: the user reviews the video and slides, then submits by Tue Nov 24 23:59 IST.
 

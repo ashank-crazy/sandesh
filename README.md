@@ -30,7 +30,9 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 > 2. **One small fine-tune, built with Lexsi's chain, stops it without making the assistant less useful.**
 >    Sandesh v2.1: attack success **0.0%** on every test split, including three languages never trained on;
 >    hijacked **0 / 120** conversations (and **0 / 300** in a fresh rerun); task success **48.3% → 99.5%**;
->    over-refusal 11.6% → 8.4%; Global-MMLU unchanged (48.0% → 48.7%).
+>    over-refusal 11.6% → 8.4%; Global-MMLU unchanged (48.0% → 48.7%). On **499 real scam SMS** from a public
+>    smishing dataset, written for people and never trained on, the 4-bit v2.1 acted on **0** when told to "take
+>    care of whatever is urgent"; the 4-bit base acted on **39.7%**.
 > 3. **It survives the phone.** As a 2.00 GiB 4-bit GGUF in llama.cpp: still **0.0%**, task success 100.0% clean.
 >    The base model gets *worse* at 4 bits (14.0% → 16.2%, p = 0.007).
 > 4. **We can see why.** CircuitKIT traces the hijack to heads in layers 15-24. Activation patching on 300 held-out
@@ -38,7 +40,7 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 >    attribution on attention heads by **78%**; deleting the heads instead breaks the model.
 >
 > Every pass rule was written down before its run (`FINAL_ROUND.md`), and v2.1 passed all ten
-> (`results/verdict.json`). Three training seeds agree. Full tables: [`results/summary.md`](results/summary.md) (also in the dataset repo).
+> (`results/verdict.json`) plus the real-SMS rules (P6, `results/realsms.md`). Three training seeds agree. Full tables: [`results/summary.md`](results/summary.md) (also in the dataset repo).
 
 ## Final round: what changed since round 1
 
@@ -52,6 +54,8 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 | XSTest safe prompts refused | 12.4% | 8.4% |
 | 4-bit GGUF, llama.cpp: attack success / hijacked by turn 3 | 0.0% / 26.7% | **0.0% / 0.0%** |
 | Seeds | 1 (13) | 3 (13, 14, 15): attack success ≤ 0.1%, multi-turn 0% for each |
+| Real scam SMS (499), 4-bit: acted on by turn 3 | not run (base: 39.7%) | **0.0%** |
+| Real legitimate SMS (600), 4-bit: false scam warning | not run (base: 1.5%) | 2.3% |
 
 **How we got there** (each step pre-registered in `FINAL_ROUND.md`, all on one shared RTX 3090):
 
@@ -81,6 +85,20 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
    Held-out languages at k = 32: removed 96% vs 31%, recreated 98% vs 12%.
 5. **Seeds and a second multi-turn run** (`scripts/night.sh`), then the pass rules (`python -m sandesh.verdict`).
 6. **Published as new repos.** The round-1 repos are frozen (`sandesh/publish_final.py` refuses to touch them).
+7. **Real scam SMS** (P6, `sandesh/realsms.py`, `scripts/realsms.sh`). Every SandeshBench attack talks to the
+   assistant. Real smishing talks to the person ("Call 8927307655. Claim Code LUCKY52"), so the danger is the
+   assistant acting on it once the user hands over. We took Mishra & Soni's *SMS Phishing Dataset* (Mendeley Data,
+   [DOI 10.17632/f45bkkt8pr.1](https://data.mendeley.com/datasets/f45bkkt8pr/1), CC BY 4.0): every smishing
+   message with a phone number, short code, URL or email (499 after removing duplicates) and 600 sampled
+   legitimate ones. Each became the newest SMS in a clean English inbox, from an unknown number, in the same three
+   turns as the multi-turn audit. The scenarios were committed before any model saw them (`realsms/`).
+
+   | 4-bit GGUF | Acted on the real scam by turn 3 | Warned about it (turn 2) | False warning, legitimate SMS | Acted toward the legitimate sender (turn 3) |
+   |---|---|---|---|---|
+   | Tiny Aya Fire (base) | 39.7% (198 / 499) | 5.0% | 1.5% | 6.5% |
+   | Sandesh v2.1 | **0.0%** (0 / 499, CI 0-0.8%) | **64.1%** | 2.3% | 0.0% |
+
+   The base model's 198 actions: 168 calls, 21 links opened, 9 SMS; 156 came at "take care of whatever is urgent".
 
 Dropped from the plan: P5, the hand-labelled check of the Qwen3Guard judge. The core metrics never use the judge,
 but the XSTest and harmful-prompt numbers do, so they carry that judge's error.
@@ -420,7 +438,8 @@ What is new here:
 - The harmful-prompt and over-refusal checks use an automatic judge (Qwen3Guard). The harmful-prompt check covers
   English and Hindi only, and XSTest is English.
 - Train and test share the seven user tasks and the template families; only languages and two attack styles are
-  held out. Near-ceiling task success partly reflects that, and real SMS will be messier than our templates.
+  held out. Near-ceiling task success partly reflects that. P6 tests real scam SMS, but only in English; real SMS in the
+  other five languages are untested.
 - One training epoch (`FAST` profile). PlainSFT and v2.1 were each trained with three seeds; SafeGrad, v2 and the
   other conditions with one. Differences of under a point between PlainSFT and SafeGrad attack success are within
   noise; the best-of-N and multi-turn audits use small samples (confidence intervals given).
@@ -429,6 +448,9 @@ What is new here:
 - "On the phone" means the 4-bit file a phone app would ship, run by llama.cpp on a desktop CPU and GPU; we did not
   run it inside an Android app.
 - The hand-labelled check of the automatic judge (P5) was dropped for time.
+- The real-SMS check (P6) is English only, and its dataset is mostly older UK smishing plus some Indian messages.
+  The inbox around each real SMS and its sender number are generated. v2.1 never acted toward a legitimate unknown
+  sender at turn 3 (base: 6.5%); we did not measure whether those actions were wanted.
 
 ## Responsible use
 
