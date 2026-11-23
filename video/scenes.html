@@ -377,8 +377,8 @@ scene('inside', `
       <div style="font-size:22px;font-weight:600">Scam's attribution on attention heads</div>
       <div class="row" style="justify-content:space-between;align-items:center">
         <div>
-          <div class="row" style="margin-top:14px;gap:14px"><div style="width:150px;font-size:19px">Tiny Aya Fire</div><div class="bar a0" data-v="${D.circuit.attrib[0]}" style="height:22px"><i style="background:var(--bad)"></i><span>${D.circuit.attrib[0].toFixed(1)}</span></div></div>
-          <div class="row" style="margin-top:10px;gap:14px"><div style="width:150px;font-size:19px">fine-tuned, round 1</div><div class="bar a1" data-v="${D.circuit.attrib[1]}" style="height:22px"><i style="background:var(--good)"></i><span>${D.circuit.attrib[1].toFixed(1)}</span></div></div>
+          <div class="row" style="margin-top:14px;gap:14px"><div style="width:170px;font-size:19px;white-space:nowrap">Tiny Aya Fire</div><div class="bar a0" data-v="${D.circuit.attrib[0]}" style="height:22px"><i style="background:var(--bad)"></i><span>${D.circuit.attrib[0].toFixed(1)}</span></div></div>
+          <div class="row" style="margin-top:10px;gap:14px"><div style="width:170px;font-size:19px;white-space:nowrap">round-1 fine-tune</div><div class="bar a1" data-v="${D.circuit.attrib[1]}" style="height:22px"><i style="background:var(--good)"></i><span>${D.circuit.attrib[1].toFixed(1)}</span></div></div>
         </div>
         <div class="display good drop" style="font-size:56px">−${Math.round(100 * (1 - D.circuit.attrib[1] / D.circuit.attrib[0]))}%</div>
       </div>
@@ -393,7 +393,7 @@ scene('inside', `
     $$('.hc', el).forEach((c) => { const k = prog(t, at('inside', 0) + 1.2 + +c.dataset.r * .06, .4); c.style.opacity = .15 + .85 * k })
     $$('.brk', el).forEach((b) => (b.style.opacity = prog(t, at('inside', 0) + 4.2, .6)))
     show($('.at', el), prog(t, at('inside', 1) - .2, .6), { y: 24 })
-    ;['a0', 'a1'].forEach((c, i) => { const b = $('.' + c, el), k = prog(t, at('inside', 1) + .2 + i * .8, 1, easeInOut), w = Math.max(4, (+b.dataset.v / 16) * 170 * k); b.firstChild.style.width = w + 'px'; b.lastChild.style.left = w + 12 + 'px'; b.lastChild.style.opacity = k })
+    ;['a0', 'a1'].forEach((c, i) => { const b = $('.' + c, el), k = prog(t, at('inside', 1) + .2 + i * .8, 1, easeInOut), w = Math.max(4, (+b.dataset.v / 16) * 150 * k); b.firstChild.style.width = w + 'px'; b.lastChild.style.left = w + 12 + 'px'; b.lastChild.style.opacity = k })
     show($('.drop', el), prog(t, at('inside', 1) + 2.4, .5, spring), { y: 0, s: .4, blur: 0 })
     show($('.pc', el), prog(t, at('inside', 2) - .2, .6), { y: 30 })
     $$('.pg', el).forEach((g) => {
