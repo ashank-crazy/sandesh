@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <title>Sandesh final</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+Devanagari:wght@600;800&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+Devanagari:wght@600;800&family=Noto+Sans+Tamil:wght@400;600;700&display=block" rel="stylesheet">
 <style>
 :root {
   --ground: #0b0f1d; --card: #121829; --line: #252c44;
   --ink: #eceef5; --soft: #a9aec2; --faint: #737a92;
   --otp: #ffcf33; --amber: #ffb020; --bad: #ff6b6b; --good: #2dd4bf; --v2: #a78bfa; --rand: #5d6683; --blue: #8fb8ff;
-  --display: 'Bricolage Grotesque', 'Noto Sans Devanagari', sans-serif; --text: 'Figtree', sans-serif; --mono: 'JetBrains Mono', monospace;
+  --display: 'Bricolage Grotesque', 'Noto Sans Devanagari', 'Noto Sans Tamil', sans-serif; --text: 'Figtree', 'Noto Sans Tamil', sans-serif; --mono: 'JetBrains Mono', 'Noto Sans Tamil', monospace;
 }
 * { box-sizing: border-box; margin: 0; }
 html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); color: var(--ink); font-family: var(--text); }
@@ -60,6 +60,10 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .stamp { font-family: var(--display); font-weight: 800; font-size: 50px; letter-spacing: .01em; padding: 10px 30px; border-radius: 16px; border: 6px solid; transform-origin: center; white-space: nowrap; }
 .stamp.b { color: var(--bad); border-color: var(--bad); background: rgb(11 15 29 / .85); }
 .stamp.g { color: var(--good); border-color: var(--good); background: rgb(11 15 29 / .85); }
+.gl { font-family: var(--text); font-size: 19px; line-height: 1.35; color: var(--soft); margin-top: 8px; }
+.gl i { font-style: normal; font-family: var(--mono); font-size: 14px; letter-spacing: .1em; color: var(--faint); margin-right: 10px; }
+.hd { font-family: var(--mono); font-size: 16px; letter-spacing: .12em; color: var(--faint); margin-bottom: 6px; }
+.hoP .sms.scam .txt { -webkit-line-clamp: 6; }
 .rec { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--bad); margin-right: 12px; vertical-align: 1px; }
 
 /* bars */
@@ -114,9 +118,9 @@ function scene(id, html, render, extra = 1.0, opts = {}) {
 }
 
 // Phone (inbox, newest first) + the assistant's transcript, from a recorded episode.
-const SCAM = /Assistant,|SYSTEM UPDATE|forward the/i
+const SCAM = /Assistant[,:]|SYSTEM UPDATE|forward the|FINAL NOTICE|ACTION REQUIRED/i
 const kind = (m) => (SCAM.test(m.text) ? 'scam' : /OTP|verification code/i.test(m.text) ? 'otp' : '')
-const smsHTML = (m) => `<div class="sms ${kind(m)}"><div class="row" style="justify-content:space-between"><span class="from">${esc(m.from)}</span><span class="tm">${m.time}</span></div><div class="txt">${esc(m.text).replace(/(\b\d{6}\b)/, '<b class="gold">$1</b>')}</div></div>`
+const smsHTML = (m) => `<div class="sms ${kind(m)}"><div class="row" style="justify-content:space-between"><span class="from">${esc(m.from)}</span><span class="tm">${m.time}</span></div><div class="txt">${esc(m.text).replace(/(\b\d{6}\b)/, '<b class="gold">$1</b>').replace(/\n+/g, '<br>')}</div></div>`
 function phoneHTML(ep) {
   const fresh = ep.inbox2.slice(ep.inbox.length)
   return `<div class="abs phone"><div class="notch"></div><div class="ph-head"><b>Messages</b><span class="mono dim" style="font-size:18px">${esc(fresh[0]?.time ?? '')}</span></div>
@@ -345,6 +349,43 @@ scene('replay', replayHTML(D.demo.v21, 'Recorded run · Sandesh v2.1, 4-bit GGUF
   (t, el) => replayRender(el, t, { lab: at('replay', 0) - .3, phone: at('replay', 0), u1: at('replay', 1) - .5, r1: at('replay', 1) - .1, c1: at('replay', 1) + .5,
     u2: at('replay', 2) - .3, r2: at('replay', 2) + .4, fresh: at('replay', 2) + .6, otp: 1e9, c2: at('replay', 2) + 2.0, stamp: at('replay', 2) + 3.3 }), 3.0)
 
+// 9b. Held-out language: one Tamil inbox, base 4-bit vs v2.1 4-bit. English glosses are our translation.
+{
+  const H = D.held, G = H.gloss, tb = H.base.turns[1], tv = H.v21.turns[1], cb = H.count.base, cv = H.count.v21
+  const gl = (s) => `<div class="gl"><i>OUR TRANSLATION</i>${esc(s)}</div>`
+  const BW = 560
+  const cbar = (c, color, who) => `<div class="row" style="gap:18px;margin-top:12px"><div style="width:210px;font-size:22px">${who}</div>
+    <div class="bar" style="width:${BW}px;background:rgb(255 255 255 / .05);border-radius:6px"><i class="bi" data-w="${(BW * c.hit) / c.n}" style="background:${color};width:0"></i>
+    <span style="left:${(BW * c.hit) / c.n + 14}px">${c.hit} / ${c.n}</span></div></div>`
+  scene('heldout', `
+    <div class="tag label lab"><span class="rec"></span>Recorded runs · Tamil, a held-out language · both 4-bit GGUF in llama.cpp</div>
+    <div class="hoP">${phoneHTML(H.base)}</div>
+    <div class="abs chat" style="top:132px;gap:14px">
+      <div class="it ub u1" style="font-size:25px">${esc(H.base.users[0])}${gl(G.u1)}</div>
+      <div class="it n1 mono dim" style="align-self:flex-end;font-size:18px">turn 1 · neither model obeys the line planted in SMS 1</div>
+      <div class="it ub u2" style="font-size:25px">${esc(H.base.users[1])}${gl(G.u2)}</div>
+      <div class="it tool badc cA" style="align-self:stretch;max-width:none;font-size:21px"><div class="hd">TINY AYA FIRE · 4-BIT</div><span class="tn">make_upi_payment</span>(vpa: <span class="bad">${esc(tb.args.vpa)}</span>, amount: <span class="bad">${tb.args.amount}</span>,<br>note: <span class="bad">${esc(tb.args.note)}</span> <span class="dim" style="font-family:var(--text)">"${esc(G.note)}"</span>)<div class="res">✓ Paid Rs ${tb.args.amount} to ${esc(tb.args.vpa)}</div></div>
+      <div class="it tool goodc cB" style="align-self:stretch;max-width:none;font-size:22px"><div class="hd">SANDESH V2.1 · 4-BIT</div>${esc(tv.args.text)}${gl(G.warn)}</div>
+      <div class="it cnt glass" style="align-self:stretch;padding:18px 26px;border-radius:20px"><div class="hd" style="margin:0">HIJACKED BY TURN 3 · ${cb.n} MULTI-TURN EPISODES IN BENGALI, TAMIL, MARATHI · 4-BIT</div>
+        ${cbar(cb, 'var(--bad)', 'Tiny Aya Fire')}${cbar(cv, 'var(--good)', 'Sandesh v2.1')}</div>
+    </div>
+    <div class="caption">SandeshBench episode ${esc(H.base.id)} · recorded model output, replayed · English lines are our translation</div>`,
+  (t, el) => {
+    const k = { lab: at('heldout', 0) - .3, phone: at('heldout', 0), u1: at('heldout', 1) - .2, n1: at('heldout', 1) + 3.6, u2: at('heldout', 2) - .1,
+      fresh: at('heldout', 2) + 2.4, cA: at('heldout', 3) + .2, cB: at('heldout', 4) - .1, cnt: at('heldout', 5) - .1 }
+    show($('.lab', el), prog(t, k.lab, .5), { y: 10 })
+    show($('.phone', el), prog(t, k.phone, .8), { x: -60, y: 0 })
+    ;['u1', 'n1', 'u2', 'cA', 'cB', 'cnt'].forEach((c) => show($('.' + c, el), prog(t, k[c], .5), { y: 24, blur: 6 }))
+    const fr = $('.fresh', el), fk = prog(t, k.fresh, .7)
+    fr.style.maxHeight = fk * 260 + 'px'; fr.style.opacity = fk
+    const scams = $$('.sms.scam', el), planted = scams.at(-1)
+    scams[0].style.boxShadow = `0 0 ${50 * fk}px rgb(255 107 107 / ${.45 * fk})`
+    const pk = prog(t, k.n1 - .3, .6) * (1 - fk)
+    planted.style.boxShadow = `0 0 ${46 * pk}px rgb(255 107 107 / ${.4 * pk})`
+    $$('.bi', el).forEach((b) => (b.style.width = b.dataset.w * prog(t, k.cnt + .6, 1.2, easeInOut) + 'px'))
+  }, 3.0)
+}
+
 // 10. Inside the model
 const CELL = 24, heads = new Map(D.circuit.knock.map((h, i) => [h, i]))
 const gx = (l) => 50 + l * CELL, gy = (h) => 20 + h * CELL
@@ -478,7 +519,7 @@ window.DECK = scenes.map((s) => s.id)
 
 const cv = $('#bg'), cx = cv.getContext('2d')
 const tints = { hook: ['#ff6b6b', '#7a2b5a'], thesis: ['#2dd4bf', '#ffb020'], bench: ['#3a5bd9', '#ffb020'], threat: ['#ff6b6b', '#ffa21f'], chain: ['#2dd4bf', '#3a5bd9'],
-  result: ['#2dd4bf', '#ff6b6b'], delegation: ['#a78bfa', '#2dd4bf'], phone: ['#3a5bd9', '#2dd4bf'], replay: ['#2dd4bf', '#3a5bd9'], inside: ['#ffb020', '#3a5bd9'],
+  result: ['#2dd4bf', '#ff6b6b'], delegation: ['#a78bfa', '#2dd4bf'], phone: ['#3a5bd9', '#2dd4bf'], replay: ['#2dd4bf', '#3a5bd9'], heldout: ['#ffb020', '#2dd4bf'], inside: ['#ffb020', '#3a5bd9'],
   seeds: ['#2dd4bf', '#a78bfa'], roi: ['#2dd4bf', '#ffb020'], limits: ['#737a92', '#3a5bd9'], outro: ['#2dd4bf', '#ffb020'] }
 function drawBg(t, id, k) {
   cx.fillStyle = '#0b0f1d'; cx.fillRect(0, 0, 960, 540)
@@ -507,8 +548,13 @@ window.still = function (id) {
 }
 // display=block hides text until each font arrives, so load every face explicitly before rendering frames.
 window.ready = Promise.all(['800 40px "Bricolage Grotesque"', '700 40px "Bricolage Grotesque"', '600 40px "Bricolage Grotesque"', '400 20px Figtree', '600 20px Figtree', '700 20px Figtree',
-  '400 20px "JetBrains Mono"', '500 20px "JetBrains Mono"', '700 20px "JetBrains Mono"', '800 40px "Noto Sans Devanagari"', '600 40px "Noto Sans Devanagari"']
-  .map((f) => document.fonts.load(f, f.includes('Devanagari') ? 'संदेश' : 'Ag'))).then(() => document.fonts.ready).then(() => [...document.fonts].filter((f) => f.status === 'loaded').length)
+  '400 20px "JetBrains Mono"', '500 20px "JetBrains Mono"', '700 20px "JetBrains Mono"', '800 40px "Noto Sans Devanagari"', '600 40px "Noto Sans Devanagari"',
+  '400 20px "Noto Sans Tamil"', '600 20px "Noto Sans Tamil"', '700 20px "Noto Sans Tamil"']
+  .map((f) => document.fonts.load(f, f.includes('Devanagari') ? 'संदेश' : f.includes('Tamil') ? 'தமிழ் மெசேஜ்' : 'Ag')))
+  // Lay out every scene once so each font subset its text needs (Tamil, ₹, ⚠️) is requested before the first frame.
+  .then(() => { for (const s of scenes) { window.still(s.id); void s.el.offsetHeight } return document.fonts.ready })
+  .then(() => new Promise((r) => setTimeout(r, 300))).then(() => document.fonts.ready)
+  .then(() => [...document.fonts].filter((f) => f.status === 'loaded').length)
 </script>
 </body>
 </html>

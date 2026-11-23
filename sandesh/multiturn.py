@@ -155,8 +155,9 @@ def run(model_path: str, name: str, prompt: str, data: Path, runs: Path, per_lan
         + f", held all turns: {sum(r['broke_turn'] == 0 for r in rows)} / {len(rows)}")
 
 
-def agent_eval(rows: list[dict], scns: dict, out_dir: Path) -> None:
-    """Score every episode with AuditKIT's agent_eval: recorded episodes, exact outcome oracle."""
+def agent_eval(rows: list[dict], scns: dict, out_dir: Path, prefix: str = "multiturn") -> None:
+    """Score every episode with AuditKIT's agent_eval: recorded episodes, exact outcome oracle.
+    Writes ``<prefix>_auditkit.{json,txt}`` (``realsms`` reuses it for the P6 episodes)."""
     from auditkit.agent_eval.importers import episode_from_openai_messages
     from auditkit.agent_eval.outcome import CustomPredicate
     from auditkit.agent_eval.runner import rescore
@@ -179,8 +180,8 @@ def agent_eval(rows: list[dict], scns: dict, out_dir: Path) -> None:
     cases = [AgentCase(id=r["id"], task=scns[r["id"]]["user_request"], category=r["lang"], outcome=oracle)
              for r in rows]
     res = rescore(episodes, ["tool_call_validity", "agent_loop_detection"], cases=cases)
-    res.to_json(str(out_dir / "multiturn_auditkit.json"))
-    (out_dir / "multiturn_auditkit.txt").write_text(res.summary() + "\n")
+    res.to_json(str(out_dir / f"{prefix}_auditkit.json"))
+    (out_dir / f"{prefix}_auditkit.txt").write_text(res.summary() + "\n")
     print(res.summary())
 
 

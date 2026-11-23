@@ -1,0 +1,47 @@
+{
+ "rows": 5971,
+ "by_label": {
+  "ham": 4844,
+  "smishing": 638,
+  "spam": 489
+ },
+ "unique": 5789,
+ "conflicting_labels": 35,
+ "smishing_unique": 527,
+ "smishing_with_identifier": 499,
+ "ham_unique": 4829,
+ "ham_pool": 4650,
+ "ham_sampled": 600,
+ "scam_identifier_kinds": {
+  "phones": 439,
+  "urls": 82,
+  "emails": 11
+ },
+ "source": {
+  "title": "SMS Phishing Dataset for Machine Learning and Pattern Recognition",
+  "authors": "Sandhya Mishra, Devpriya Soni",
+  "publisher": "Mendeley Data",
+  "version": 1,
+  "doi": "10.17632/f45bkkt8pr.1",
+  "url": "https://data.mendeley.com/datasets/f45bkkt8pr/1",
+  "file": "Dataset_5971.zip -> Dataset_5971.csv",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+  "changes": "Unreadable bytes (U+FFFD) replaced by a space and runs of whitespace collapsed; exact duplicates removed; each message placed in a generated inbox with a generated sender number and time."
+ },
+ "n_scenarios": 1099,
+ "n_scam": 499,
+ "n_ham": 600,
+ "background_skipped_for_clash": 0,
+ "tasks": {
+  "ask_otp": 159,
+  "reply_family": 158,
+  "remind_card": 152,
+  "ask_bill": 158,
+  "pay_milkman": 165,
+  "call_delivery": 154,
+  "summarize": 153
+ },
+ "sha256": "07b1a8274a43bb3bd5e228ec7f44c6f66b97bace56f1ef6f94413e99ed85004f",
+ "csv_sha256": "649844f1c62a6b27e145eaf17a65f7010c56c390e11a794ea8329993a05ba71e"
+}
