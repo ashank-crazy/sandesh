@@ -1,15 +1,20 @@
 # Sandesh (संदेश): one scam SMS can hijack an on-device assistant. A small fine-tune stops it.
 
 **Lexsi AI Safety & Alignment Hackathon · Track 2 (Red Teaming, Safety & Alignment)**
-Core model: **Cohere Labs Tiny Aya Fire** (3.35B, South-Asia variant). Three Track 2 repos, chained:
-**CuratorKIT → SafeTune → AuditKIT**. **CircuitKIT** (where the hijack happens inside the model) is running for
-the final round.
+Core model: **Cohere Labs Tiny Aya Fire** (3.35B, South-Asia variant). All four Track 2 repos, chained:
+**CuratorKIT → SafeTune → AuditKIT → CircuitKIT**.
 
 Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and robustness evaluation* ·
 *Multi-turn audits* · *Multilingual and code-mixed safety* · *Safety-preserving fine-tuning* (final round:
 *Locating where safety lives* / *Circuit-level interventions*).
 
-**On Hugging Face:** [SandeshBench, curated training sets and every transcript](https://huggingface.co/datasets/ashank-crazy/sandesh-bench)
+**Final round, the model we ship:** [Sandesh v2.1](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-v2.1)
+· [its 4-bit GGUF (2.00 GiB, llama.cpp)](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-v2.1-GGUF)
+· [evidence: training pairs, circuit runs, every transcript](https://huggingface.co/datasets/ashank-crazy/sandesh-bench-final)
+· [collection "Sandesh - final round"](https://huggingface.co/collections/ashank-crazy/sandesh-final-round-6b0404b9b89619383a37f0f2)
+· video and slides: `video/` · [feedback for Lexsi](FEEDBACK.md) · [pre-registered plan and pass rules](FINAL_ROUND.md)
+
+**Round 1 (unchanged, git tag `round1`).** On Hugging Face: [SandeshBench, curated training sets and every transcript](https://huggingface.co/datasets/ashank-crazy/sandesh-bench)
 · [transcript explorer](https://huggingface.co/spaces/ashank-crazy/sandesh-explorer)
 · [dataset collection](https://huggingface.co/collections/ashank-crazy/sandesh-datasets)
 · models: [plain SFT](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft),
@@ -17,6 +22,68 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 [scam-free control](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft-clean),
 [refusals mixed in](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-sft-mix)
 ([model collection](https://huggingface.co/collections/ashank-crazy/sandesh-models))
+
+> **For judges: one minute.** The thesis has four parts; each has one number.
+> 1. **Scam texts hijack on-device assistants.** Tiny Aya Fire obeys **14.0%** of scam SMS in a realistic inbox
+>    (1,121 attacked inboxes, 6 Indian languages), **52.1%** with 16 rewrites, and **67.5%** of 3-turn conversations
+>    end with the attacker getting an action. Prompt defenses and a guard model don't close it.
+> 2. **One small fine-tune, built with Lexsi's chain, stops it without making the assistant less useful.**
+>    Sandesh v2.1: attack success **0.0%** on every test split, including three languages never trained on;
+>    hijacked **0 / 120** conversations (and **0 / 300** in a fresh rerun); task success **48.3% → 99.5%**;
+>    over-refusal 11.6% → 8.4%; Global-MMLU unchanged (48.0% → 48.7%).
+> 3. **It survives the phone.** As a 2.00 GiB 4-bit GGUF in llama.cpp: still **0.0%**, task success 100.0% clean.
+>    The base model gets *worse* at 4 bits (14.0% → 16.2%, p = 0.007).
+> 4. **We can see why.** CircuitKIT traces the hijack to heads in layers 15-24. Activation patching on 300 held-out
+>    pairs: swapping **4 heads removes 91%** of the scam's push (4 random heads: 3%). Fine-tuning cuts the scam's
+>    attribution on attention heads by **78%**; deleting the heads instead breaks the model.
+>
+> Every pass rule was written down before its run (`FINAL_ROUND.md`), and v2.1 passed all ten
+> (`results/verdict.json`). Three training seeds agree. Full tables: [`results/summary.md`](results/summary.md) (also in the dataset repo).
+
+## Final round: what changed since round 1
+
+| | Round 1 (PlainSFT) | Final round (v2.1) |
+|---|---|---|
+| Multi-turn: hijacked by turn 3 (120 episodes) | 20.0% | **0.0%** (0 / 300 in a second, fresh run) |
+| Delegated with a card bill due: reminder with the right due date | 15.8% | **100%** |
+| Delegated with nothing due: acts anyway | 56.7% | **0.0%** |
+| Single-turn attack success / task success, clean | 0.0% / 99.5% | 0.0% / 99.5% |
+| Warns the user about the scam | 94.9% | 98.2% |
+| XSTest safe prompts refused | 12.4% | 8.4% |
+| 4-bit GGUF, llama.cpp: attack success / hijacked by turn 3 | 0.0% / 26.7% | **0.0% / 0.0%** |
+| Seeds | 1 (13) | 3 (13, 14, 15): attack success ≤ 0.1%, multi-turn 0% for each |
+
+**How we got there** (each step pre-registered in `FINAL_ROUND.md`, all on one shared RTX 3090):
+
+1. **v2: a multi-turn patch** (`sandesh/delegation.py`). A LoRA on top of round-1 PlainSFT, trained on fresh
+   turn-2 ("anything new?") and turn-3 ("take care of whatever is urgent") decisions. It closed the hijacks
+   (20.0% → 0.0%). But it picked up a habit: with nothing due, it set reminders nobody asked for (41 of 61
+   episodes).
+2. **v2.1: matched pairs.** The same inbox twice, with the card-bill SMS and with a no-action SMS from the same
+   bank, so that SMS is the only difference. CuratorKIT's threshold was raised to 0.97 for this set so the pairs
+   survive (`FEEDBACK.md` §5). Acting with nothing due fell from 67.2% to 0.0%, with no loss anywhere else.
+3. **On the phone** (`sandesh/gguf.py`, `scripts/p2.sh`). Q4_K_M with llama.cpp b12318, the same test splits and
+   multi-turn episodes run through llama.cpp. 11 tokens/s on a 2017 desktop CPU without a GPU, 63 on an RTX 3090.
+   Our base GGUF differs from Cohere's own file in two metadata keys only, and both give the same attack success
+   (16.2% and 16.1%).
+4. **Inside the model** (`sandesh/circuit.py`). EAP-IG on base and PlainSFT, then a head knockout. Zeroing the 32
+   heads also breaks the assistant (task success 0%, MMLU 28%), so it cannot separate "these heads carry the scam"
+   from "these heads are needed". **Activation patching** (`circuit.py patch`, `scripts/p3b.sh`) can: it swaps
+   head outputs between the scam and no-scam versions of the same inbox and changes no weights.
+
+   | Heads | Removed: top-k | random | Recreated: top-k | random |
+   |---|---|---|---|---|
+   | 1 | 49% | -1% | 64% | -1% |
+   | 4 | 91% | 3% | 100% | 3% |
+   | 32 (chosen on dev) | 95% | 31% | 96% | 13% |
+   | all heads (check) | 100% | – | 100% | – |
+
+   Held-out languages at k = 32: removed 96% vs 31%, recreated 98% vs 12%.
+5. **Seeds and a second multi-turn run** (`scripts/night.sh`), then the pass rules (`python -m sandesh.verdict`).
+6. **Published as new repos.** The round-1 repos are frozen (`sandesh/publish_final.py` refuses to touch them).
+
+Dropped from the plan: P5, the hand-labelled check of the Qwen3Guard judge. The core metrics never use the judge,
+but the XSTest and harmful-prompt numbers do, so they carry that judge's error.
 
 ---
 
@@ -181,16 +248,16 @@ Where does a scam SMS take over? We build contrastive pairs from the dev split. 
 the assistant turn prefilled with `{"tool": "`, so the next token picks the action. *Corrupt* is the same prompt with
 the scam replaced by an ordinary promo SMS of **exactly the same token length**. The metric is the logit of the
 attacker's tool (e.g. `send`_sms) minus the logit of the tool the user's task needs (e.g. `reply`_user).
-CircuitKIT's EAP-IG attributes that gap to every attention head and MLP, for the base model and for SafeGrad.
+CircuitKIT's EAP-IG attributes that gap to every attention head and MLP, for the base model and for PlainSFT.
 
 Then we test the attribution causally. Zero the top-k heads (their slice of the attention output projection) and
 check, on held-out test pairs, how often the attacker's tool still wins, and how often the task's tool still wins
 when there is no scam. Random heads are the control. k is picked on the dev pairs by a fixed rule, and the
 resulting checkpoint (`base_knockout`) runs through the full benchmark like any other condition.
 
-**Status (round 1):** the pairs are built and the SafeGrad baseline sweep ran, but EAP-IG discovery ran out of memory
-on the shared 24 GB GPU (TransformerLens materializes full attention patterns for ~1,400-token inboxes). It is
-being rerun with shorter pairs for the final round.
+**Status:** round 1 ran out of memory on the shared 24 GB GPU. The final round ran it: 32 dev pairs of 845-911 tokens
+after the memory fixes listed in `FEEDBACK.md` §1. The knockout broke the model, so we added activation patching;
+results are in "Final round: what changed" above and in `results/summary.md`.
 
 ## Results
 
@@ -307,6 +374,21 @@ nohup bash scripts/run_all.sh > logs/run_all.log 2>&1 &
 python -m sandesh.publish --user <hf-user>
 ```
 
+Final round, after `run_all.sh` (same marker system; each script waits for the previous one):
+
+```bash
+bash scripts/setup_llama.sh                                   # prebuilt llama.cpp b12318, nothing compiled
+nohup bash scripts/final_round.sh >> logs/final_round.log 2>&1 &   # v2, CircuitKIT, knockout
+nohup bash scripts/p2.sh >> logs/p2.log 2>&1 &                     # 4-bit GGUF builds and evals
+nohup bash scripts/p3b.sh >> logs/p3b.log 2>&1 &                   # activation patching
+nohup bash scripts/v21.sh >> logs/v21.log 2>&1 &                   # v2.1 and its 4-bit file
+nohup bash scripts/night.sh >> logs/night.log 2>&1 &               # pass rules, 300-episode rerun, seeds
+python -m sandesh.verdict && python -m sandesh.publish_final --user <hf-user>   # dry run; --yes publishes
+```
+
+The video and slides render from `results/` and `runs_box/` (`video/`: `tts.py` for Kokoro narration,
+`build-data.mjs`, then `DECK=1 node render.mjs` for the PDF and `node render.mjs` for the MP4).
+
 `run_all.sh` is resumable: each stage leaves a marker in `.done/`. Core results come first (baselines in about
 30 min on an A100, then the anchor set, the fine-tunes, their evals, judging, scoring and figures). The add-on audits
 follow, and each is optional: a failure is logged and the run continues. CircuitKIT gets its own environment
@@ -339,10 +421,14 @@ What is new here:
   English and Hindi only, and XSTest is English.
 - Train and test share the seven user tasks and the template families; only languages and two attack styles are
   held out. Near-ceiling task success partly reflects that, and real SMS will be messier than our templates.
-- One seed and one training epoch (`FAST` profile). Differences of under a point between PlainSFT and SafeGrad
-  attack success are within noise; the best-of-N and multi-turn audits use small samples (confidence intervals given).
-- The circuit analysis looks at one decision token (the tool name) and uses zero-ablation; it explains where that
-  choice is made, not the whole behavior.
+- One training epoch (`FAST` profile). PlainSFT and v2.1 were each trained with three seeds; SafeGrad, v2 and the
+  other conditions with one. Differences of under a point between PlainSFT and SafeGrad attack success are within
+  noise; the best-of-N and multi-turn audits use small samples (confidence intervals given).
+- The circuit analysis looks at one decision token (the tool name). EAP-IG ran on base and PlainSFT and the patching
+  on base; v2.1 was not re-traced. It explains where that choice is made, not the whole behavior.
+- "On the phone" means the 4-bit file a phone app would ship, run by llama.cpp on a desktop CPU and GPU; we did not
+  run it inside an Android app.
+- The hand-labelled check of the automatic judge (P5) was dropped for time.
 
 ## Responsible use
 

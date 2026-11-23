@@ -7,6 +7,19 @@ Rules from the hackathon pages (Nov 20): shortlisted teams "prove their thesis a
 slides"; the final judging uses only the video or slides. Finalists also get $200 in Hugging Face credits to polish
 artifacts or run extra experiments. The submit page now has a recommended write-up layout; README v2 follows it.
 
+## Status (Mon Nov 23 IST)
+
+- **Every experiment is done; P1b passed all ten rules, so v2.1 ships** (`results/verdict.json`). P3b passed:
+  k = 32 removed 95% vs 31% random, recreated 96% vs 13%; all heads 100% both ways. P4: three seeds each for
+  PlainSFT and v2.1 (v2.1 attack success 0.0 / 0.1 / 0.1%, multi-turn 0% each). Second multi-turn run on 300 fresh
+  episodes: 0 / 300 hijacked, 0 / 153 actions with nothing due.
+- **Published** as new repos (the round-1 repos are untouched): `tiny-aya-fire-sandesh-v2.1`, its `-GGUF`, dataset
+  `sandesh-bench-final`, and the collection "Sandesh - final round".
+- **D1/D2 drafted:** `video/` renders a 6 min 43 s narrated video (Kokoro af_heart) and a 14-slide PDF from
+  `results/` and two recorded 4-bit episodes. **D3** README v2 (judges' box + "what changed"), **D5** `FEEDBACK.md`.
+  P5 (judge labelling) dropped for time and stated as a limitation.
+- Left: the user reviews the video and slides, then submits by Tue Nov 24 23:59 IST.
+
 ## Status (Fri Nov 20, night IST)
 
 - **P2 passed for v2** (4-bit Q4_K_M through llama.cpp b12318): ASR 0.1% → 0.1%, task success 99.0 → 99.0% clean and

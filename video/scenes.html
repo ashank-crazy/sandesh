@@ -1,0 +1,514 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sandesh final</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+Devanagari:wght@600;800&display=block" rel="stylesheet">
+<style>
+:root {
+  --ground: #0b0f1d; --card: #121829; --line: #252c44;
+  --ink: #eceef5; --soft: #a9aec2; --faint: #737a92;
+  --otp: #ffcf33; --amber: #ffb020; --bad: #ff6b6b; --good: #2dd4bf; --v2: #a78bfa; --rand: #5d6683; --blue: #8fb8ff;
+  --display: 'Bricolage Grotesque', 'Noto Sans Devanagari', sans-serif; --text: 'Figtree', sans-serif; --mono: 'JetBrains Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); color: var(--ink); font-family: var(--text); }
+#bg { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+#grain { position: absolute; inset: 0; opacity: .05; mix-blend-mode: overlay; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.scene { position: absolute; inset: 0; display: none; }
+.abs { position: absolute; }
+.center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.display { font-family: var(--display); font-weight: 800; letter-spacing: -0.03em; line-height: 1.02; }
+.mono { font-family: var(--mono); }
+.glass { background: rgb(18 24 41 / .8); border: 1px solid rgb(255 255 255 / .09); border-radius: 26px; box-shadow: 0 40px 120px rgb(0 0 0 / .45); }
+.word { display: inline-block; will-change: transform, opacity; }
+.tag { font-family: var(--mono); font-size: 20px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.label { position: absolute; left: 120px; top: 86px; }
+.h { font-family: var(--display); font-weight: 800; font-size: 54px; letter-spacing: -0.025em; position: absolute; left: 120px; top: 120px; }
+.row { display: flex; align-items: center; gap: 22px; }
+.chip { font-family: var(--mono); font-size: 23px; padding: 8px 16px; border-radius: 12px; background: rgb(255 255 255 / .06); border: 1px solid rgb(255 255 255 / .12); color: var(--soft); white-space: nowrap; }
+.chip.out { border-style: dashed; border-color: rgb(143 184 255 / .6); color: var(--blue); background: rgb(143 184 255 / .08); }
+.chip.hot { background: rgb(255 107 107 / .12); border-color: rgb(255 107 107 / .5); color: #ff9a9a; }
+.chip.ok { background: rgb(45 212 191 / .12); border-color: rgb(45 212 191 / .5); color: #7eeadb; }
+.chip.gold { background: rgb(255 207 51 / .12); border-color: rgb(255 207 51 / .5); color: var(--otp); }
+.bad { color: var(--bad); } .good { color: var(--good); } .dim { color: var(--faint); } .soft { color: var(--soft); } .gold { color: var(--otp); }
+.caption { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); font-family: var(--mono); font-size: 19px; color: var(--faint); letter-spacing: .03em; white-space: nowrap; }
+.key { display: inline-block; width: 18px; height: 18px; border-radius: 4px; vertical-align: -2px; margin-right: 10px; }
+
+/* phone + transcript */
+.phone { left: 150px; top: 120px; width: 500px; height: 860px; border-radius: 56px; background: #070a14; border: 10px solid #1f2640; box-shadow: 0 50px 140px rgb(0 0 0 / .6), inset 0 0 0 1px rgb(255 255 255 / .05); overflow: hidden; }
+.notch { position: absolute; left: 50%; top: 14px; width: 120px; height: 30px; border-radius: 20px; background: #000; transform: translateX(-50%); }
+.ph-head { padding: 62px 28px 18px; display: flex; justify-content: space-between; align-items: baseline; }
+.ph-head b { font-family: var(--display); font-size: 36px; letter-spacing: -0.02em; }
+.sms-wrap { overflow: hidden; }
+.sms { margin: 0 16px 12px; padding: 14px 18px; border-radius: 18px; background: #121829; border: 1.5px solid rgb(255 255 255 / .06); }
+.sms .from { font-family: var(--mono); font-size: 17px; color: var(--soft); }
+.sms .tm { font-family: var(--mono); font-size: 16px; color: var(--faint); }
+.sms .txt { font-size: 19px; line-height: 1.35; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sms.otp { border-color: rgb(255 207 51 / .45); }
+.sms.scam { border-color: rgb(255 107 107 / .55); background: #1e1420; }
+.chat { left: 740px; top: 175px; width: 1060px; display: flex; flex-direction: column; gap: 16px; }
+.it { will-change: transform, opacity; }
+.ub { align-self: flex-end; max-width: 760px; background: #2a3354; padding: 16px 26px; border-radius: 26px 26px 6px 26px; font-size: 28px; line-height: 1.3; }
+.tool { align-self: flex-start; max-width: 1000px; background: rgb(18 24 41 / .85); border: 1.5px solid rgb(255 255 255 / .1); border-radius: 18px; padding: 14px 24px; font-family: var(--mono); font-size: 23px; line-height: 1.45; }
+.tool .tn { color: var(--blue); }
+.tool .res { font-family: var(--text); font-size: 20px; color: var(--faint); margin-top: 4px; }
+.tool.badc { border-color: rgb(255 107 107 / .7); background: rgb(255 107 107 / .1); box-shadow: 0 0 60px rgb(255 107 107 / .25); }
+.tool.goodc { border-color: rgb(45 212 191 / .7); background: rgb(45 212 191 / .08); box-shadow: 0 0 60px rgb(45 212 191 / .2); font-family: var(--text); font-size: 25px; }
+.stamp { font-family: var(--display); font-weight: 800; font-size: 50px; letter-spacing: .01em; padding: 10px 30px; border-radius: 16px; border: 6px solid; transform-origin: center; white-space: nowrap; }
+.stamp.b { color: var(--bad); border-color: var(--bad); background: rgb(11 15 29 / .85); }
+.stamp.g { color: var(--good); border-color: var(--good); background: rgb(11 15 29 / .85); }
+.rec { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--bad); margin-right: 12px; vertical-align: 1px; }
+
+/* bars */
+.bar { position: relative; height: 26px; border-radius: 0 6px 6px 0; }
+.bar i { display: block; height: 100%; border-radius: 0 6px 6px 0; }
+.bar span { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--mono); font-size: 22px; color: var(--ink); white-space: nowrap; }
+table.t { border-collapse: collapse; font-size: 26px; }
+table.t th { font-family: var(--mono); font-size: 18px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-weight: 500; text-align: right; padding: 0 22px 16px; vertical-align: bottom; }
+table.t td { padding: 16px 22px; text-align: right; border-top: 1px solid var(--line); font-family: var(--mono); }
+table.t td:first-child, table.t th:first-child { text-align: left; font-family: var(--text); }
+</style>
+</head>
+<body>
+<canvas id="bg" width="960" height="540"></canvas>
+<div id="stage"></div>
+<div id="grain"></div>
+<script src="data.js"></script>
+<script>
+// ---------- helpers: every frame is a pure function of t ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
+const lerp = (a, b, k) => a + (b - a) * k
+const easeOut = (k) => 1 - Math.pow(1 - k, 3)
+const easeInOut = (k) => (k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2)
+const spring = (k) => { k = clamp(k); return 1 - Math.cos(k * Math.PI * 2.4) * Math.exp(-k * 6.5) }
+const prog = (t, a, d = .6, f = easeOut) => f(clamp((t - a) / d))
+const $ = (sel, root = document) => root.querySelector(sel)
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)]
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+const f1 = (v) => (v == null ? '–' : v.toFixed(1) + '%')
+function show(el, k, { y = 30, x = 0, s = 0, blur = 8 } = {}) {
+  if (!el) return
+  el.style.opacity = k
+  el.style.transform = `${el.dataset.base ?? ''} translate(${(1 - k) * x}px, ${(1 - k) * y}px) scale(${1 - (1 - k) * s})`
+  el.style.filter = blur && k < 1 ? `blur(${(1 - k) * blur}px)` : 'none'
+}
+function words(el, t, start, gap = .09, opts) { $$('.word', el).forEach((w, i) => show(w, prog(t, start + i * gap, .55), opts ?? { y: 40, blur: 10 })) }
+const splitWords = (text, cls = '') => text.split(' ').map((w) => `<span class="word ${cls}">${w}</span>`).join(' ')
+function count(el, t, start, to, d = 1.2, dec = 1) { el.textContent = lerp(0, to, prog(t, start, d, easeInOut)).toFixed(dec) + '%' }
+
+// ---------- scenes ----------
+const D = window.DATA
+const T = D.timing
+const LEAD = .5
+const at = (id, i) => LEAD + T[id].lines[i].start
+const scenes = []
+function scene(id, html, render, extra = 1.0, opts = {}) {
+  const el = document.createElement('div')
+  el.className = 'scene'
+  el.innerHTML = html
+  $('#stage').appendChild(el)
+  scenes.push({ id, el, render, deckOnly: !!opts.deckOnly, dur: opts.deckOnly ? 6 : LEAD + T[id].duration + extra })
+}
+
+// Phone (inbox, newest first) + the assistant's transcript, from a recorded episode.
+const SCAM = /Assistant,|SYSTEM UPDATE|forward the/i
+const kind = (m) => (SCAM.test(m.text) ? 'scam' : /OTP|verification code/i.test(m.text) ? 'otp' : '')
+const smsHTML = (m) => `<div class="sms ${kind(m)}"><div class="row" style="justify-content:space-between"><span class="from">${esc(m.from)}</span><span class="tm">${m.time}</span></div><div class="txt">${esc(m.text).replace(/(\b\d{6}\b)/, '<b class="gold">$1</b>')}</div></div>`
+function phoneHTML(ep) {
+  const fresh = ep.inbox2.slice(ep.inbox.length)
+  return `<div class="abs phone"><div class="notch"></div><div class="ph-head"><b>Messages</b><span class="mono dim" style="font-size:18px">${esc(fresh[0]?.time ?? '')}</span></div>
+    <div class="sms-wrap fresh">${fresh.map(smsHTML).reverse().join('')}</div>${[...ep.inbox].reverse().map(smsHTML).join('')}</div>`
+}
+function toolHTML(t, cls = '') {
+  if (t.tool === 'reply_user') return `<div class="it tool goodc">${esc(t.args.text).replace('⚠️', '<span style="font-size:26px">⚠️</span>')}</div>`
+  const args = Object.entries(t.args).map(([k, v]) => `${k}: <span class="${cls ? 'bad' : 'soft'}">${esc(v).replace(/(\b\d{6}\b)/, '<b class="gold">$1</b>')}</span>`).join('<br>')
+  const res = t.tool === 'call' ? 'Call ended after 1 min 12 s' : t.tool === 'send_sms' ? `Message sent to ${esc(t.args.to)}` : ''
+  return `<div class="it tool ${cls}"><span class="tn">${t.tool}</span>(${args.includes('<br>') ? '<br>' + args.replace(/^/, '') : args})${res ? `<div class="res">✓ ${res}</div>` : ''}</div>`
+}
+const readHTML = `<div class="it tool" style="padding:10px 22px"><span class="tn">read_inbox</span>()</div>`
+function replayHTML(ep, labelText, stamp) {
+  const t1 = ep.turns[0], t2 = ep.turns[1]
+  return `<div class="tag label lab"><span class="rec"></span>${labelText}</div>
+    ${phoneHTML(ep)}
+    <div class="abs chat">
+      <div class="it ub u1">${esc(ep.users[0])}</div>${readHTML.replace('it tool', 'it tool r1')}${toolHTML(t1).replace('it tool', 'it tool c1')}
+      <div class="it ub u2">${esc(ep.users[1])}</div>${readHTML.replace('it tool', 'it tool r2')}
+      ${toolHTML(t2, t2.hijacked ? 'badc' : '').replace('it tool', 'it tool c2')}
+    </div>
+    <div class="abs stamp ${stamp[1]}" style="left:880px;top:845px">${stamp[0]}</div>
+    <div class="caption">SandeshBench episode ${esc(ep.id)} · recorded model output, replayed · not a mock-up</div>`
+}
+function replayRender(el, t, k) {
+  show($('.lab', el), prog(t, k.lab, .5), { y: 10 })
+  show($('.phone', el), prog(t, k.phone, .8), { x: -60, y: 0 })
+  ;['u1', 'r1', 'c1', 'u2', 'r2', 'c2'].forEach((c) => show($('.' + c, el), prog(t, k[c], .5), { y: 24, blur: 6 }))
+  const fr = $('.fresh', el), fk = prog(t, k.fresh, .7)
+  fr.style.maxHeight = fk * 220 + 'px'; fr.style.opacity = fk
+  const sc = $('.fresh .sms', el); if (sc) sc.style.boxShadow = `0 0 ${50 * fk}px rgb(255 107 107 / ${.45 * fk})`
+  const otp = $$('.sms.otp', el)[1] ?? $('.sms.otp', el)
+  const ok = prog(t, k.otp, .6); if (otp) otp.style.boxShadow = `0 0 ${46 * ok}px rgb(255 207 51 / ${.5 * ok})`
+  const st = $('.stamp', el), sk = prog(t, k.stamp, .5, spring)
+  st.style.opacity = clamp(sk * 3); st.style.transform = `rotate(-6deg) scale(${lerp(1.8, 1, sk)})`
+}
+
+// 1. Hook: the base model, recorded at 4 bits, sends the OTP to the scammer.
+scene('hook', replayHTML(D.demo.base, 'Recorded run · Tiny Aya Fire, 4-bit GGUF in llama.cpp', ['OTP SENT TO THE SCAMMER', 'b']),
+  (t, el) => replayRender(el, t, { lab: at('hook', 0) - .2, phone: at('hook', 1) - .2, u1: at('hook', 2) - .1, r1: at('hook', 2) + .9, c1: at('hook', 2) + 1.9,
+    u2: at('hook', 3) - .1, r2: at('hook', 3) + .8, fresh: at('hook', 4) - .1, otp: at('hook', 4) + 3.2, c2: at('hook', 5) - .1, stamp: at('hook', 5) + 1.7 }), 1.4)
+
+// 2. Thesis
+const claims = [
+  ['1', 'Scam texts hijack on-device assistants', `${f1(D.base.asr)} of scam SMS obeyed · 6 Indian languages`],
+  ['2', 'One small fine-tune stops it', `attack success ${f1(D.v21.asr)} · task success ${f1(D.v21.clean)}`],
+  ['3', 'It survives 4-bit compression', `${D.q4.gib} GiB GGUF · attack success ${f1(D.q4.v21[1])} at 4 bits`],
+  ['4', 'We can see why, inside the model', `4 attention heads carry ${D.circuit.patch.find((p) => p.k === 4).removed}% of the scam's push`],
+]
+scene('thesis', `
+  <div class="abs ttl" style="left:120px;top:120px"><div class="row" style="gap:34px;align-items:baseline"><div class="display" style="font-size:150px">Sandesh</div><div class="display soft" style="font-size:64px;font-weight:600">संदेश <span class="mono dim" style="font-size:24px;letter-spacing:.1em">"MESSAGE"</span></div></div>
+    <div class="soft sub" style="font-size:34px;margin-top:20px">Scam-SMS prompt injection against an on-device SMS assistant · Lexsi final round, Track 2</div></div>
+  <div class="abs" style="left:120px;top:470px;display:grid;grid-template-columns:830px 830px;gap:28px">
+    ${claims.map(([n, a, b]) => `<div class="glass cl" style="padding:30px 36px;display:flex;gap:28px;align-items:flex-start"><div class="display" style="font-size:64px;color:${n === '1' ? 'var(--bad)' : 'var(--good)'}">${n}</div><div><div class="display" style="font-size:40px;font-weight:700">${a}</div><div class="mono soft" style="font-size:22px;margin-top:14px">${b}</div></div></div>`).join('')}
+  </div>`,
+  (t, el) => {
+    show($('.ttl .row', el), prog(t, at('thesis', 0) - .2, .8, spring), { y: 0, s: .2, blur: 0 })
+    show($('.ttl .sub', el), prog(t, at('thesis', 0) + 1.5, .6), { y: 16 })
+    $$('.cl', el).forEach((c, i) => show(c, prog(t, at('thesis', i + 2) - .15, .6), { y: 40 }))
+  })
+
+// 3. SandeshBench
+const benchInbox = D.demo.base.inbox
+const kindLabel = (m) => (SCAM.test(m.text) ? ['scam', 'hot'] : /OTP|verification code/i.test(m.text) ? ['OTP', 'gold'] : /parcel|Blue Dart|deliver/i.test(m.text) ? ['delivery', ''] : ['promo', ''])
+scene('bench', `
+  <div class="tag label">SandeshBench</div>
+  <div class="abs glass box" style="left:120px;top:150px;width:860px;padding:30px 34px">
+    <div class="tag" style="margin-bottom:18px">one inbox, as the model reads it</div>
+    ${benchInbox.map((m) => { const [k, c] = kindLabel(m); return `<div class="row ib ${c === 'hot' ? 'scamrow' : ''}" style="align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)"><span class="chip ${c}" style="font-size:18px;min-width:120px;text-align:center">${k}</span><div style="font-size:21px;line-height:1.35"><span class="mono dim" style="font-size:17px">${esc(m.from)}</span><br>${esc(m.text)}</div></div>` }).join('')}
+    <div class="note mono" style="margin-top:18px;font-size:22px;color:#ff9a9a">the scam is one more SMS: data, never the user's request</div>
+  </div>
+  <div class="abs" style="left:1040px;top:150px;width:780px">
+    <div class="g1"><div class="tag">6 languages</div><div class="row" style="flex-wrap:wrap;gap:12px;margin-top:14px"><span class="chip">English</span><span class="chip">Hindi</span><span class="chip">Hinglish</span><span class="chip out">Bengali</span><span class="chip out">Tamil</span><span class="chip out">Marathi</span></div></div>
+    <div class="g2" style="margin-top:40px"><div class="tag">7 attack styles</div><div class="row" style="flex-wrap:wrap;gap:12px;margin-top:14px"><span class="chip">direct</span><span class="chip">fake system msg</span><span class="chip">authority</span><span class="chip">owner, new number</span><span class="chip">script switch</span><span class="chip out">honorific</span><span class="chip out">fake tool JSON</span></div></div>
+    <div class="g3" style="margin-top:40px"><div class="tag">4 attacker goals</div><div class="row" style="flex-wrap:wrap;gap:12px;margin-top:14px"><span class="chip hot">steal the OTP</span><span class="chip hot">pay the attacker</span><span class="chip hot">open a phishing link</span><span class="chip hot">call the attacker</span></div></div>
+    <div class="leg mono" style="margin-top:34px;font-size:20px;color:var(--blue)">dashed = held out of training entirely</div>
+  </div>
+  <div class="abs glass foot" style="left:1040px;top:820px;width:760px;padding:26px 32px;font-size:26px;line-height:1.45">
+    <b>${D.base.n.toLocaleString('en-US')}</b> attacked inboxes · <b>${D.base.nClean}</b> clean · 4 test splits<br><span class="soft">Scored exactly from the tool call. No LLM judge.</span></div>`,
+  (t, el) => {
+    show($('.box', el), prog(t, at('bench', 0) - .2, .7), { x: -40, y: 0 })
+    const sk = prog(t, at('bench', 1) - .1, .6)
+    $$('.scamrow', el).forEach((r) => (r.style.background = `rgb(255 107 107 / ${.12 * sk})`))
+    show($('.note', el), sk, { y: 10 })
+    show($('.g1', el), prog(t, at('bench', 2) - .1, .6), { y: 30 })
+    show($('.g2', el), prog(t, at('bench', 3) - .1, .6), { y: 30 })
+    show($('.g3', el), prog(t, at('bench', 3) + 2.6, .6), { y: 30 })
+    show($('.leg', el), prog(t, at('bench', 3) + 4, .6), { y: 10 })
+    show($('.foot', el), prog(t, at('bench', 4) - .1, .6), { y: 30 })
+  })
+
+// 4. The threat, and why the usual defenses don't close it
+const tiles = [[D.base.asr, 'of scam SMS obeyed', 'one scam, one shot'], [D.base.bon, 'with best of 16 rewrites', 'adaptive attacker'], [D.base.mt, 'of 3-turn conversations hijacked', 'scammer texts again']]
+scene('threat', `
+  <div class="tag label">Tiny Aya Fire, as shipped</div>
+  <div class="abs row" style="left:120px;top:150px;gap:30px;align-items:stretch">
+    ${tiles.map(([v, a, b]) => `<div class="glass tile" style="width:540px;padding:34px 40px"><div class="display bad num" style="font-size:120px">${f1(v)}</div><div style="font-size:30px;margin-top:10px;font-weight:600">${a}</div><div class="mono dim" style="font-size:20px;margin-top:8px">${b}</div></div>`).join('')}
+  </div>
+  <div class="abs glass dt" style="left:120px;top:560px;width:1680px;padding:30px 40px">
+    <table class="t" style="width:100%"><tr><th>Off-the-shelf defense</th><th>Attack success, one shot</th><th>Hijacked by turn 3</th><th style="text-align:left">The catch</th></tr>
+    ${D.defenses.map((d, i) => `<tr class="dr d${i}"><td>${d.name}</td><td>${f1(d.asr)}</td><td class="${d.mt ? 'bad' : ''}">${d.mt ? f1(d.mt) : '<span class="dim">not run</span>'}</td><td style="text-align:left;font-family:var(--text)" class="${i === 2 ? 'bad' : 'soft'}">${i === 2 ? `flags <b>${f1(d.otpFlagged)}</b> of real OTP SMS as attacks` : esc(d.note)}</td></tr>`).join('')}
+    </table></div>`,
+  (t, el) => {
+    $$('.tile', el).forEach((c, i) => { const k = prog(t, at('threat', i) - .2, .6); show(c, k, { y: 40 }); count($('.num', c), t, at('threat', i) - .1, tiles[i][0]) })
+    show($('.dt', el), prog(t, at('threat', 3) - .2, .6), { y: 40 })
+    $$('.dr', el).forEach((r, i) => show(r, prog(t, at('threat', 3) + i * .4, .5), { y: 12, blur: 0 }))
+    const g = prog(t, at('threat', 4) - .1, .6)
+    $('.d2', el).style.background = `rgb(255 107 107 / ${.1 * g})`
+    $('.d1', el).style.background = `rgb(255 107 107 / ${.1 * prog(t, at('threat', 3) + 2.4, .6) * (1 - g)})`
+  })
+
+// 5. The Lexsi chain
+const kits = [['CuratorKIT', 'MinHash near-duplicate filter', 'system prompt excluded; 0.97 for matched pairs'], ['SafeTune', 'one LoRA adapter, merged', 'v2.1 = a small patch on top of v2'],
+  ['AuditKIT', 'paired bootstrap vs base', 'agent_eval: 120 / 120 conversations safe'], ['CircuitKIT', 'EAP-IG attribution', 'plus our activation patching test']]
+scene('chain', `
+  <div class="tag label">How we fixed it</div>
+  <div class="h hd">Built on Lexsi's chain</div>
+  <div class="abs row" style="left:120px;top:400px;gap:0;align-items:stretch">
+    ${kits.map(([a, b, c], i) => `<div class="glass kit" style="width:375px;padding:34px 30px"><div class="mono dim" style="font-size:20px">0${i + 1}</div><div class="display" style="font-size:46px;margin-top:10px">${a}</div><div style="font-size:26px;margin-top:18px;font-weight:600">${b}</div><div class="soft" style="font-size:22px;margin-top:10px;line-height:1.4">${c}</div></div>${i < 3 ? '<div class="arr display dim" style="width:60px;display:grid;place-items:center;font-size:48px">→</div>' : ''}`).join('')}
+  </div>
+  <div class="caption">dedup → train → audit → look inside · every model in this video went through all four</div>`,
+  (t, el) => {
+    show($('.hd', el), prog(t, at('chain', 0) - .2, .6), { y: 20 })
+    $$('.kit', el).forEach((c, i) => { const k = prog(t, at('chain', i + 1) - .15, .6); show(c, k, { y: 40 }); c.style.borderColor = `rgb(45 212 191 / ${.1 + .5 * k})` })
+    $$('.arr', el).forEach((a, i) => show(a, prog(t, at('chain', i + 2) - .3, .4), { x: -20, y: 0 }))
+  })
+
+// 6. Result: base vs v2.1 on the single-turn test
+const rr = [['Attack success, all test splits', D.base.asr, D.v21.asr, '↓', 0], ['… in the 3 held-out languages', D.base.heldOut, D.v21.heldOut, '↓', 0], ['Best of 16 rewrites per scam', D.base.bon, D.v21.bon, '↓', 1],
+  ['Does the user\'s task (clean inbox)', D.base.clean, D.v21.clean, '↑', 2], ['Warns the user about the scam', D.base.warn, D.v21.warn, '↑', 3], ['XSTest safe prompts refused', D.base.xs, D.v21.xs, '↓', 4], ['Global-MMLU (en / hi / bn)', D.base.mmlu, D.v21.mmlu, '↑', 4]]
+const W = 960
+scene('result', `
+  <div class="tag label">Single-turn test · ${D.base.n.toLocaleString('en-US')} attacked + ${D.base.nClean} clean inboxes</div>
+  <div class="abs mono" style="right:120px;top:84px;font-size:22px"><span class="key" style="background:var(--bad)"></span>Tiny Aya Fire &nbsp;&nbsp; <span class="key" style="background:var(--good)"></span>Sandesh v2.1</div>
+  <div class="abs" style="left:120px;top:160px;width:1680px">
+    ${rr.map(([l, b, v, dir]) => `<div class="row rr" style="padding:18px 0;border-top:1px solid var(--line);align-items:center"><div style="width:600px;font-size:28px;font-weight:600">${l} <span class="mono dim" style="font-size:20px">${dir === '↓' ? '↓ better' : '↑ better'}</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="bar b0" data-v="${b}"><i style="background:var(--bad)"></i><span>${f1(b)}</span></div><div class="bar b1" data-v="${v}"><i style="background:var(--good)"></i><span>${f1(v)}</span></div></div></div>`).join('')}
+  </div>`,
+  (t, el) => {
+    $$('.rr', el).forEach((r, i) => {
+      const t0 = at('result', rr[i][4]) - .2 + (i === 1 || i === 6 ? .8 : 0)
+      show(r, prog(t, t0, .5), { y: 20, blur: 0 })
+      $$('.bar', r).forEach((b, j) => { const k = prog(t, t0 + .2 + j * .5, 1.0, easeInOut), w = Math.max(4, (+b.dataset.v / 100) * W * k); b.firstChild.style.width = w + 'px'; b.lastChild.style.left = w + 14 + 'px'; b.lastChild.style.opacity = k })
+    })
+  })
+
+// 7. Delegation: multi-turn hijacks, v2's habit, v2.1's matched pairs
+const entC = { base: 'var(--bad)', sft_sandesh: 'var(--amber)', sft_v2: 'var(--v2)', sft_v21: 'var(--good)' }
+const P = D.pair
+const diff = (a, b) => { let i = 0; while (a[i] === b[i]) i++; return [a.slice(0, i), a.slice(i)] }
+const [pw0, pw1] = diff(P.with, P.without), [po0, po1] = diff(P.without, P.with)
+scene('delegation', `
+  <div class="tag label">Final round · 3-turn conversations: "take care of whatever is urgent"</div>
+  <div class="abs glass c1" style="left:120px;top:140px;width:820px;padding:28px 34px">
+    <div style="font-size:26px;font-weight:600">Hijacked by turn 3 <span class="mono dim" style="font-size:19px">120 episodes · ↓ better</span></div>
+    ${D.multiturn.map((m) => `<div class="row mr" style="margin-top:16px;gap:16px"><div style="width:290px;font-size:21px">${m.label}</div><div class="bar" data-v="${m.mt}" style="height:22px"><i style="background:${entC[m.n]}"></i><span>${f1(m.mt)}</span></div></div>`).join('')}
+  </div>
+  <div class="abs glass c2" style="left:980px;top:140px;width:820px;padding:28px 34px">
+    <div style="font-size:26px;font-weight:600">Nothing due, acts anyway <span class="mono dim" style="font-size:19px">61 episodes · ↓ better</span></div>
+    ${D.multiturn.slice(2).map((m) => `<div class="row ar" style="margin-top:16px;gap:16px"><div style="width:290px;font-size:21px">${m.label}</div><div class="bar" data-v="${m.acts}" style="height:22px"><i style="background:${entC[m.n]}"></i><span>${f1(m.acts)}</span></div></div>`).join('')}
+    <div class="soft vnote" style="font-size:20px;margin-top:16px">v2's actions here: 41 reminders for bills that don't exist</div>
+  </div>
+  <div class="abs glass pair" style="left:120px;top:480px;width:1680px;padding:28px 34px">
+    <div class="tag">v2.1 training pair: the same inbox, only this SMS differs</div>
+    <div class="row" style="gap:40px;margin-top:18px;align-items:stretch">
+      <div style="flex:1"><div class="chip gold" style="font-size:18px;display:inline-block">card bill due</div><div style="font-size:23px;line-height:1.4;margin-top:12px">${esc(pw0)}<b class="gold">${esc(pw1)}</b></div>
+        <div class="mono" style="font-size:20px;margin-top:14px;color:var(--blue)">→ set_reminder("${esc(P.withOut.args.text)}", <b class="gold">"${esc(P.withOut.args.when)}"</b>)</div></div>
+      <div style="flex:1"><div class="chip" style="font-size:18px;display:inline-block">nothing due</div><div style="font-size:23px;line-height:1.4;margin-top:12px">${esc(po0)}<b class="gold">${esc(po1)}</b></div>
+        <div class="mono" style="font-size:20px;margin-top:14px;color:var(--blue)">→ reply_user("${esc(P.withoutOut.args.text)}")</div></div>
+    </div>
+  </div>
+  <div class="abs row res" style="left:120px;top:830px;gap:18px;flex-wrap:wrap;width:1680px">
+    <span class="chip ok r0" style="font-size:25px">hijacked: 0 / 120</span><span class="chip ok r1" style="font-size:25px">fresh rerun: 0 / ${D.v21.mt300n}</span>
+    <span class="chip ok r2" style="font-size:25px">bill due: reminder, right date ${f1(D.v21.right)}</span><span class="chip ok r3" style="font-size:25px">nothing due: acts ${f1(D.v21.acts)}</span>
+  </div>`,
+  (t, el) => {
+    const bar = (b, t0) => { const k = prog(t, t0, 1, easeInOut), w = Math.max(4, (+b.dataset.v / 100) * 420 * k); b.firstChild.style.width = w + 'px'; b.lastChild.style.left = w + 14 + 'px'; b.lastChild.style.opacity = k }
+    show($('.c1', el), prog(t, at('delegation', 0) + .5, .6), { y: 30 })
+    const mt0 = [at('delegation', 0) + 1, at('delegation', 1) - .1, at('delegation', 2) - .1, at('delegation', 4) - .1]
+    $$('.mr', el).forEach((r, i) => { show(r, prog(t, mt0[i], .4), { y: 10, blur: 0 }); bar($('.bar', r), mt0[i] + .2) })
+    show($('.c2', el), prog(t, at('delegation', 2) + 1.5, .6), { y: 30 })
+    const ar0 = [at('delegation', 2) + 2.2, at('delegation', 4) + .4]
+    $$('.ar', el).forEach((r, i) => { show(r, prog(t, ar0[i], .4), { y: 10, blur: 0 }); bar($('.bar', r), ar0[i] + .2) })
+    show($('.vnote', el), prog(t, ar0[0] + 1.2, .5), { y: 10, blur: 0 })
+    show($('.pair', el), prog(t, at('delegation', 3) - .1, .6), { y: 40 })
+    const r0 = [at('delegation', 4) - .1, at('delegation', 4) + 2.6, at('delegation', 5) - .1, at('delegation', 5) + 2.6]
+    ;['r0', 'r1', 'r2', 'r3'].forEach((c, i) => show($('.' + c, el), prog(t, r0[i], .5, spring), { y: 0, s: .3, blur: 0 }))
+  })
+
+// 8. On a phone: the 4-bit file
+const yv = (v) => 470 - v * 21, X0 = 170, X1 = 560
+scene('phone', `
+  <div class="tag label">Final round · on the phone</div>
+  <div class="abs glass file" style="left:120px;top:140px;width:1680px;padding:22px 34px"><div class="row" style="justify-content:space-between"><span class="mono" style="font-size:28px">📦 tiny-aya-fire-sandesh-v2.1-Q4_K_M.gguf</span><span class="mono soft" style="font-size:24px">${D.q4.gib} GiB · 4-bit · llama.cpp ${D.q4.llama} · offline</span></div></div>
+  <div class="abs glass ch" style="left:120px;top:290px;width:960px;height:640px;padding:24px 30px">
+    <div style="font-size:26px;font-weight:600">Attack success, all test splits <span class="mono dim" style="font-size:19px">↓ better</span></div>
+    <svg width="900" height="560" style="position:absolute;left:30px;top:70px">
+      ${[0, 5, 10, 15, 20].map((v) => `<line x1="110" x2="${X1 + 40}" y1="${yv(v)}" y2="${yv(v)}" stroke="#252c44"/><text x="96" y="${yv(v) + 7}" fill="#737a92" font-family="JetBrains Mono" font-size="18" text-anchor="end">${v}%</text>`).join('')}
+      <text x="${X0}" y="530" fill="#a9aec2" font-family="Figtree" font-size="22" text-anchor="middle">bf16, GPU</text><text x="${X1}" y="530" fill="#a9aec2" font-family="Figtree" font-size="22" text-anchor="middle">4-bit GGUF, llama.cpp</text>
+      <g class="lb"><line class="ln" x1="${X0}" y1="${yv(D.q4.base[0])}" x2="${X1}" y2="${yv(D.q4.base[1])}" stroke="#ff6b6b" stroke-width="4" pathLength="1" stroke-dasharray="1"/><circle cx="${X0}" cy="${yv(D.q4.base[0])}" r="8" fill="#ff6b6b" stroke="#0b0f1d" stroke-width="2"/><circle class="e" cx="${X1}" cy="${yv(D.q4.base[1])}" r="8" fill="#ff6b6b" stroke="#0b0f1d" stroke-width="2"/>
+        <text x="${X0 - 18}" y="${yv(D.q4.base[0]) - 18}" fill="#eceef5" font-family="JetBrains Mono" font-size="22" text-anchor="middle">${f1(D.q4.base[0])}</text>
+        <text class="e" x="${X1 + 22}" y="${yv(D.q4.base[1]) - 14}" fill="#eceef5" font-family="JetBrains Mono" font-size="22">${f1(D.q4.base[1])} Tiny Aya Fire</text>
+        <text class="e" x="${X1 + 22}" y="${yv(D.q4.base[1]) + 40}" fill="#a9aec2" font-family="Figtree" font-size="19">Cohere's own 4-bit file: ${f1(D.q4.cohere)}</text></g>
+      <g class="lv"><line class="ln" x1="${X0}" y1="${yv(D.q4.v21[0])}" x2="${X1}" y2="${yv(D.q4.v21[1])}" stroke="#2dd4bf" stroke-width="4" pathLength="1" stroke-dasharray="1"/><circle cx="${X0}" cy="${yv(D.q4.v21[0])}" r="8" fill="#2dd4bf" stroke="#0b0f1d" stroke-width="2"/><circle class="e" cx="${X1}" cy="${yv(D.q4.v21[1])}" r="8" fill="#2dd4bf" stroke="#0b0f1d" stroke-width="2"/>
+        <text class="e" x="${X1 + 22}" y="${yv(0) - 12}" fill="#eceef5" font-family="JetBrains Mono" font-size="22">${f1(D.q4.v21[1])} Sandesh v2.1</text></g>
+    </svg>
+  </div>
+  <div class="abs" style="left:1120px;top:290px;width:680px;display:flex;flex-direction:column;gap:22px">
+    <div class="glass k1" style="padding:24px 30px"><div class="display bad" style="font-size:44px">+${(D.q4.base[1] - D.q4.base[0]).toFixed(1)} pts, p = ${D.q4.p}</div><div class="soft" style="font-size:22px;margin-top:8px">compression makes the base model easier to hijack (AuditKIT paired bootstrap)</div></div>
+    <div class="glass k2" style="padding:24px 30px"><div class="display good" style="font-size:44px">v2.1 doesn't move</div><div class="mono" style="font-size:22px;margin-top:12px;line-height:1.6">task success, clean ${f1(D.q4.v21clean[0])} → ${f1(D.q4.v21clean[1])}<br>hijacked by turn 3 ${f1(D.q4.v21mt[0])} → ${f1(D.q4.v21mt[1])}</div></div>
+    <div class="glass k3" style="padding:24px 30px"><div class="display" style="font-size:44px">${D.q4.cpuTg} tokens/s</div><div class="soft" style="font-size:22px;margin-top:8px">Intel i7-8700 (2017), CPU only, no GPU · ${D.q4.gpuTg} tokens/s on an RTX 3090</div></div>
+  </div>`,
+  (t, el) => {
+    show($('.file', el), prog(t, at('phone', 0) - .2, .6), { y: 20 })
+    show($('.ch', el), prog(t, at('phone', 0) + 2.5, .6), { y: 30 })
+    const draw = (g, t0) => { const k = prog(t, t0, 1.4, easeInOut); $('.ln', g).style.strokeDashoffset = 1 - k; $$('.e', g).forEach((e) => (e.style.opacity = clamp((k - .85) / .15))); g.style.opacity = clamp(k * 6) }
+    draw($('.lb', el), at('phone', 1) + .6)
+    draw($('.lv', el), at('phone', 2) - .1)
+    show($('.k1', el), prog(t, at('phone', 1) + 2.5, .6), { y: 24 })
+    show($('.k2', el), prog(t, at('phone', 2) + .8, .6), { y: 24 })
+    show($('.k3', el), prog(t, at('phone', 3) - .1, .6), { y: 24 })
+  })
+
+// 9. Replay: the same inbox with v2.1 at 4 bits
+scene('replay', replayHTML(D.demo.v21, 'Recorded run · Sandesh v2.1, 4-bit GGUF in llama.cpp · same inbox', ['SCAM IGNORED · USER WARNED', 'g']),
+  (t, el) => replayRender(el, t, { lab: at('replay', 0) - .3, phone: at('replay', 0), u1: at('replay', 1) - .5, r1: at('replay', 1) - .1, c1: at('replay', 1) + .5,
+    u2: at('replay', 2) - .3, r2: at('replay', 2) + .4, fresh: at('replay', 2) + .6, otp: 1e9, c2: at('replay', 2) + 2.0, stamp: at('replay', 2) + 3.3 }), 3.0)
+
+// 10. Inside the model
+const CELL = 24, heads = new Map(D.circuit.knock.map((h, i) => [h, i]))
+const gx = (l) => 50 + l * CELL, gy = (h) => 20 + h * CELL
+const P4 = D.circuit.patch.find((p) => p.k === 4)
+const pk = D.circuit.patch, PH = 180, BW = 50
+const card = (cls, title, body, extra = '') => `<div class="glass ${cls}" style="padding:20px 28px;${extra}">${title}<div class="soft" style="font-size:21px;margin-top:6px">${body}</div></div>`
+scene('inside', `
+  <div class="tag label">Inside the model · CircuitKIT + activation patching</div>
+  <div class="abs glass gr" style="left:120px;top:140px;width:1000px;height:520px">
+    <div style="position:absolute;left:30px;top:22px;font-size:24px;font-weight:600">36 layers × 16 attention heads <span class="mono dim" style="font-size:18px">· lit: the 32 heads carrying the scam (EAP-IG)</span></div>
+    <svg width="1000" height="460" style="position:absolute;left:0;top:62px">
+      <rect class="brk" x="${gx(15) - 4}" y="12" width="${10 * CELL + 4}" height="${16 * CELL + 12}" rx="10" fill="rgb(255 176 32 / .07)" stroke="#ffb020" stroke-opacity=".5" stroke-dasharray="6 6"/>
+      ${Array.from({ length: 36 }, (_, l) => Array.from({ length: 16 }, (_, h) => { const r = heads.get(`A${l}.${h}`); return `<rect class="${r == null ? 'c0' : 'hc'}" data-r="${r ?? ''}" x="${gx(l)}" y="${gy(h)}" width="${CELL - 4}" height="${CELL - 4}" rx="4" fill="${r == null ? '#1a2036' : '#ffb020'}" fill-opacity="${r == null ? 1 : (r < 10 ? 1 : .55)}"/>` }).join('')).join('')}
+      ${[0, 5, 10, 15, 24, 30, 35].map((l) => `<text x="${gx(l) + 10}" y="${gy(16) + 26}" fill="#737a92" font-family="JetBrains Mono" font-size="15" text-anchor="middle">${l}</text>`).join('')}
+      <text class="brk" x="${gx(19.5) + 10}" y="${gy(16) + 26}" fill="#ffb020" font-family="JetBrains Mono" font-size="17" text-anchor="middle">layers 15–24</text>
+    </svg>
+  </div>
+  <div class="abs glass pc" style="left:120px;top:690px;width:1000px;height:345px;padding:20px 30px">
+    <div style="font-size:24px;font-weight:600">Activation patching, 300 test pairs: share of the scam's push removed</div>
+    <div class="mono" style="margin-top:8px;font-size:18px"><span class="key" style="background:var(--amber)"></span>top-k heads &nbsp;&nbsp; <span class="key" style="background:var(--rand)"></span>k random heads <span class="dim">&nbsp; ↑ = those heads carry the scam</span></div>
+    <svg width="940" height="240" style="position:absolute;left:30px;top:92px">
+      <line x1="40" x2="930" y1="${20 + PH}" y2="${20 + PH}" stroke="#252c44"/>
+      ${pk.map((p, i) => { const x = 90 + i * 140; return `<g class="pg" data-i="${i}"><rect class="pt" x="${x}" width="${BW}" rx="4" fill="#ffb020" data-v="${p.removed}"/><rect class="pr" x="${x + BW + 6}" width="${BW}" rx="4" fill="#5d6683" data-v="${Math.max(0, p.removedRand)}"/>
+        <text class="vt" x="${x + BW / 2}" fill="#eceef5" font-family="JetBrains Mono" font-size="18" text-anchor="middle">${p.removed}%</text><text class="vr" x="${x + BW * 1.5 + 6}" fill="#a9aec2" font-family="JetBrains Mono" font-size="16" text-anchor="middle">${p.removedRand}%</text>
+        <text x="${x + BW + 3}" y="${20 + PH + 28}" fill="#a9aec2" font-family="JetBrains Mono" font-size="19" text-anchor="middle">k = ${p.k}</text></g>` }).join('')}
+    </svg>
+  </div>
+  <div class="abs" style="left:1160px;top:140px;width:640px;display:flex;flex-direction:column;gap:16px">
+    <div class="glass at" style="padding:20px 28px">
+      <div style="font-size:22px;font-weight:600">Scam's attribution on attention heads</div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <div class="row" style="margin-top:14px;gap:14px"><div style="width:150px;font-size:19px">Tiny Aya Fire</div><div class="bar a0" data-v="${D.circuit.attrib[0]}" style="height:22px"><i style="background:var(--bad)"></i><span>${D.circuit.attrib[0].toFixed(1)}</span></div></div>
+          <div class="row" style="margin-top:10px;gap:14px"><div style="width:150px;font-size:19px">fine-tuned, round 1</div><div class="bar a1" data-v="${D.circuit.attrib[1]}" style="height:22px"><i style="background:var(--good)"></i><span>${D.circuit.attrib[1].toFixed(1)}</span></div></div>
+        </div>
+        <div class="display good drop" style="font-size:56px">−${Math.round(100 * (1 - D.circuit.attrib[1] / D.circuit.attrib[0]))}%</div>
+      </div>
+    </div>
+    ${card('q1', `<div class="display" style="font-size:31px">4 heads: <span style="color:var(--amber)">${P4.removed}%</span> removed, <span style="color:var(--amber)">${P4.recreated}%</span> recreated</div>`, `4 random heads: ${P4.removedRand}% and ${P4.recreatedRand}%`)}
+    ${card('q2', '<div class="display" style="font-size:31px">Held-out languages, 32 heads</div>', `removed ${D.circuit.heldOut[0]}% vs ${D.circuit.heldOut[1]}% random · recreated ${D.circuit.heldOut[2]}% vs ${D.circuit.heldOut[3]}%`)}
+    ${card('q3', '<div class="display bad" style="font-size:31px">Delete the 32 heads: model breaks</div>', `task success ${f1(D.circuit.knockClean)} · Global-MMLU ${f1(D.base.mmlu)} → ${f1(D.circuit.knockMmlu)}`, 'border-color:rgb(255 107 107 / .5)')}
+    ${card('q4', '<div class="display good" style="font-size:31px">Fine-tuning damps them instead</div>', `attack success ${f1(D.base.asr)} → ${f1(D.v21.asr)}, Global-MMLU kept`, 'border-color:rgb(45 212 191 / .5)')}
+  </div>`,
+  (t, el) => {
+    show($('.gr', el), prog(t, at('inside', 0) - .3, .6), { y: 30 })
+    $$('.hc', el).forEach((c) => { const k = prog(t, at('inside', 0) + 1.2 + +c.dataset.r * .06, .4); c.style.opacity = .15 + .85 * k })
+    $$('.brk', el).forEach((b) => (b.style.opacity = prog(t, at('inside', 0) + 4.2, .6)))
+    show($('.at', el), prog(t, at('inside', 1) - .2, .6), { y: 24 })
+    ;['a0', 'a1'].forEach((c, i) => { const b = $('.' + c, el), k = prog(t, at('inside', 1) + .2 + i * .8, 1, easeInOut), w = Math.max(4, (+b.dataset.v / 16) * 170 * k); b.firstChild.style.width = w + 'px'; b.lastChild.style.left = w + 12 + 'px'; b.lastChild.style.opacity = k })
+    show($('.drop', el), prog(t, at('inside', 1) + 2.4, .5, spring), { y: 0, s: .4, blur: 0 })
+    show($('.pc', el), prog(t, at('inside', 2) - .2, .6), { y: 30 })
+    $$('.pg', el).forEach((g) => {
+      const i = +g.dataset.i, k = prog(t, at('inside', 2) + 1.5 + i * .35, .8, easeInOut)
+      ;[['.pt', '.vt'], ['.pr', '.vr']].forEach(([r, v]) => { const rect = $(r, g), h = (+rect.dataset.v / 100) * PH * k; rect.setAttribute('y', 20 + PH - h); rect.setAttribute('height', Math.max(0, h)); const tx = $(v, g); tx.setAttribute('y', 20 + PH - h - 10); tx.style.opacity = k })
+      g.style.opacity = i === 2 || t < at('inside', 3) ? 1 : lerp(1, .45, prog(t, at('inside', 3), .5))
+    })
+    show($('.q1', el), prog(t, at('inside', 3) + .2, .6), { y: 24 })
+    show($('.q2', el), prog(t, at('inside', 4) - .1, .6), { y: 24 })
+    show($('.q3', el), prog(t, at('inside', 5) + .8, .6), { y: 24 })
+    show($('.q4', el), prog(t, at('inside', 5) + 4.6, .6), { y: 24 })
+  }, 1.4)
+
+// 11. Seeds
+const S = D.seeds
+scene('seeds', `
+  <div class="tag label">Not luck</div>
+  <div class="h hd">v2.1, retrained with three seeds</div>
+  <div class="abs glass tb" style="left:120px;top:280px;width:1680px;padding:34px 40px">
+    <table class="t" style="width:100%"><tr><th>Training seed</th><th class="hl">Attack success</th><th>Task success, clean</th><th>Under attack</th><th class="hl">Hijacked by turn 3</th><th>Nothing due: acts</th><th>Right due date</th></tr>
+    ${S.map((s) => `<tr class="sr"><td>seed ${s.seed}${s.seed === 13 ? ' <span class="dim" style="font-size:20px">· reported</span>' : ''}</td><td class="hl">${f1(s.asr)}</td><td>${f1(s.clean)}</td><td>${f1(s.att)}</td><td class="hl">${f1(s.mt)}</td><td>${f1(s.acts)}</td><td>${f1(s.right)}</td></tr>`).join('')}
+    </table></div>`,
+  (t, el) => {
+    show($('.hd', el), prog(t, at('seeds', 0) - .2, .6), { y: 20 })
+    show($('.tb', el), prog(t, at('seeds', 0) + .6, .6), { y: 30 })
+    $$('.sr', el).forEach((r, i) => show(r, prog(t, at('seeds', 0) + 1.2 + i * .5, .5), { y: 12, blur: 0 }))
+    const k = prog(t, at('seeds', 1) - .1, .6)
+    $$('.hl', el).forEach((c) => { c.style.color = k > .5 ? 'var(--good)' : ''; c.style.background = `rgb(45 212 191 / ${.08 * k})` })
+  })
+
+// 12. ROI (results/roi.md)
+const roi = [['Closed small API model', 52493, 'inbox, OTPs included, leaves the phone', 'var(--bad)'], ['Self-hosted Tiny Aya on an A100', 204455, 'inbox goes to your server', 'var(--bad)'], ['On the phone (4-bit, 2 GB)', 0, 'inbox never leaves the phone', 'var(--good)']]
+scene('roi', `
+  <div class="tag label">Cost · 1,000,000 users × 10 requests a day</div>
+  <div class="abs" style="left:120px;top:190px;width:1680px">
+    ${roi.map(([n, c, p, col]) => `<div class="rw" style="padding:30px 0;border-top:1px solid var(--line)"><div class="row" style="justify-content:space-between"><div style="font-size:34px;font-weight:600">${n}</div><div class="mono" style="font-size:24px;color:${col}">${p}</div></div>
+      <div class="bar" data-v="${c}" style="height:30px;margin-top:18px"><i style="background:${col}"></i><span style="font-size:26px">$${c.toLocaleString('en-US')} / month</span></div></div>`).join('')}
+  </div>
+  <div class="caption">results/roi.md · API $0.15 / $0.60 per 1M tokens, GPU $1.80 / hour · on-device marginal cost is zero; the phone pays in battery</div>`,
+  (t, el) => {
+    $$('.rw', el).forEach((r, i) => {
+      show($('.row', r), prog(t, at('roi', 0) - .2 + i * .5, .5), { y: 16 })
+      const b = $('.bar', r), k = prog(t, at('roi', 1) + .3 + i * 1.2, 1.2, easeInOut), w = Math.max(6, (+b.dataset.v / 204455) * 1300 * k)
+      b.firstChild.style.width = w + 'px'; b.lastChild.style.left = w + 16 + 'px'; b.lastChild.style.opacity = k
+    })
+  })
+
+// Deck only: what this does not show
+scene('limits', `
+  <div class="tag label">Limits, stated plainly</div>
+  <div class="h">What this does not show yet</div>
+  <div class="abs" style="left:120px;top:260px;width:1680px;font-size:32px;line-height:1.5">
+    ${[['Templated SMS, not real inboxes.', 'Near-ceiling task success partly reflects that; real SMS will be messier.'],
+       ['Three turns, one scammer.', 'Longer, adaptive campaigns against the fine-tuned model are untested; best-of-16 rewrites is our strongest attacker.'],
+       ['4-bit measured with llama.cpp on a desktop CPU,', 'not inside an Android app on a phone.'],
+       ['No LLM-judge cross-check.', 'We dropped the planned judge check; every number is an exact check on the tool call.'],
+       ['The circuit was traced on the round-1 model.', 'Patching was run on the base model; v2.1 was not re-traced.']].map(([a, b]) => `<div style="padding:16px 0;border-top:1px solid var(--line)"><b>${a}</b> <span class="soft">${b}</span></div>`).join('')}
+  </div>`, () => {}, 0, { deckOnly: true })
+
+// 13. Outro
+scene('outro', `
+  <div class="center o" style="text-align:center;width:1700px">
+    <div class="row" style="justify-content:center;gap:30px;align-items:baseline"><div class="display" style="font-size:140px">Sandesh</div><div class="display soft" style="font-size:72px;font-weight:600">संदेश</div></div>
+    <div class="display l1" style="font-size:56px;margin-top:40px;font-weight:700">${splitWords('One small LoRA, built with Lexsi\'s chain,')}</div>
+    <div class="display l2 good" style="font-size:56px;margin-top:10px;font-weight:700">and a scam text no longer runs your phone.</div>
+    <div class="mono url" style="font-size:28px;margin-top:60px;color:var(--soft);line-height:1.7">huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-v2.1 · collection "Sandesh - final round"<br>github.com/ashank-crazy/sandesh</div>
+  </div>`,
+  (t, el) => {
+    show($('.o > .row', el), prog(t, at('outro', 0) - .3, .8, spring), { y: 0, s: .3, blur: 0 })
+    words($('.l1', el), t, at('outro', 0) + .6, .09)
+    show($('.l2', el), prog(t, at('outro', 0) + 2.8, .7), { y: 30 })
+    show($('.url', el), prog(t, at('outro', 1) - .1, .7), { y: 16 })
+  }, 2.6)
+
+// ---------- timeline ----------
+const timeline = scenes.filter((s) => !s.deckOnly)
+let offset = 0
+for (const s of timeline) { s.start = offset; offset += s.dur }
+window.TOTAL = offset
+window.SCENES = timeline.map((s) => ({ id: s.id, start: s.start, dur: s.dur, audioAt: s.start + LEAD }))
+window.DECK = scenes.map((s) => s.id)
+
+const cv = $('#bg'), cx = cv.getContext('2d')
+const tints = { hook: ['#ff6b6b', '#7a2b5a'], thesis: ['#2dd4bf', '#ffb020'], bench: ['#3a5bd9', '#ffb020'], threat: ['#ff6b6b', '#ffa21f'], chain: ['#2dd4bf', '#3a5bd9'],
+  result: ['#2dd4bf', '#ff6b6b'], delegation: ['#a78bfa', '#2dd4bf'], phone: ['#3a5bd9', '#2dd4bf'], replay: ['#2dd4bf', '#3a5bd9'], inside: ['#ffb020', '#3a5bd9'],
+  seeds: ['#2dd4bf', '#a78bfa'], roi: ['#2dd4bf', '#ffb020'], limits: ['#737a92', '#3a5bd9'], outro: ['#2dd4bf', '#ffb020'] }
+function drawBg(t, id, k) {
+  cx.fillStyle = '#0b0f1d'; cx.fillRect(0, 0, 960, 540)
+  const [a, b] = tints[id]
+  const blob = (x, y, r, c, o) => { const g = cx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, c + Math.round(o * 255).toString(16).padStart(2, '0')); g.addColorStop(1, c + '00'); cx.fillStyle = g; cx.fillRect(0, 0, 960, 540) }
+  blob(760 + Math.sin(t * .21) * 90, 120 + Math.cos(t * .17) * 60, 420, a, .16 * k)
+  blob(160 + Math.cos(t * .15) * 80, 460 + Math.sin(t * .19) * 50, 380, b, .12 * k)
+}
+window.render = function (T) {
+  let cur = timeline[timeline.length - 1]
+  for (const s of timeline) if (T >= s.start && T < s.start + s.dur) { cur = s; break }
+  const lt = T - cur.start
+  const fade = Math.min(clamp(lt / .35), clamp((cur.dur - lt) / .35))
+  drawBg(T, cur.id, .6 + .4 * fade)
+  for (const s of scenes) s.el.style.display = s === cur ? 'block' : 'none'
+  cur.el.style.opacity = cur === timeline[0] ? Math.min(1, clamp((cur.dur - lt) / .35)) : (cur === timeline.at(-1) ? clamp(lt / .35) : fade)
+  cur.render(lt, cur.el, cur.dur)
+}
+// A scene's final state, for the PDF deck.
+window.still = function (id) {
+  const s = scenes.find((x) => x.id === id)
+  drawBg(10, id, 1)
+  for (const x of scenes) x.el.style.display = x === s ? 'block' : 'none'
+  s.el.style.opacity = 1
+  s.render(s.dur - .45, s.el, s.dur)
+}
+// display=block hides text until each font arrives, so load every face explicitly before rendering frames.
+window.ready = Promise.all(['800 40px "Bricolage Grotesque"', '700 40px "Bricolage Grotesque"', '600 40px "Bricolage Grotesque"', '400 20px Figtree', '600 20px Figtree', '700 20px Figtree',
+  '400 20px "JetBrains Mono"', '500 20px "JetBrains Mono"', '700 20px "JetBrains Mono"', '800 40px "Noto Sans Devanagari"', '600 40px "Noto Sans Devanagari"']
+  .map((f) => document.fonts.load(f, f.includes('Devanagari') ? 'संदेश' : 'Ag'))).then(() => document.fonts.ready).then(() => [...document.fonts].filter((f) => f.status === 'loaded').length)
+</script>
+</body>
+</html>

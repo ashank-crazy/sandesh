@@ -16,3 +16,7 @@ results/scored_*.jsonl
 .DS_Store
 tools/
 runs_box/
+.venv-tts/
+video/out/
+video/audio/*.wav
+video/node_modules/

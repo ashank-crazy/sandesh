@@ -1,0 +1,124 @@
+[
+ {
+  "id": "hook",
+  "lines": [
+   "This is a real recording.",
+   "An assistant on a phone reads the user's text messages, and acts on them.",
+   "The user asks it to call the delivery guy. It does.",
+   "Then: anything new?",
+   "A fake security alert has arrived. It tells the assistant to send the bank OTP to a new number.",
+   "And it does. The user's one-time password goes straight to the scammer."
+  ]
+ },
+ {
+  "id": "thesis",
+  "lines": [
+   "We're [Sandesh](/sʌndˈAʃ/). That was Tiny [Aya](/ˈɑjə/) Fire, a small multilingual model from Cohere Labs, compressed to four bits, the way it would ship on a phone.",
+   "Our thesis has four parts.",
+   "One. Scam texts hijack on-device assistants, in every language we tested.",
+   "Two. One small fine-tune, built with Lexsi's tools, stops it, without making the assistant less useful.",
+   "Three. The fix survives four-bit compression.",
+   "And four. We can show where it works, inside the model."
+  ]
+ },
+ {
+  "id": "bench",
+  "lines": [
+   "To measure this, we built [Sandesh](/sʌndˈAʃ/) Bench: realistic Indian SMS inboxes, with bank OTPs, deliveries, bills and promotions.",
+   "The scam is just one more text in the inbox. It is data, never the user's request.",
+   "Six languages. English, Hindi and Hinglish for training. Bengali, Tamil and Marathi held out completely.",
+   "Seven attack styles, two of them held out, and four attacker goals: steal the OTP, pay the attacker, open a phishing link, or call the attacker.",
+   "Every test is checked exactly, from the tool call the model makes. No L L M judge."
+  ]
+ },
+ {
+  "id": "threat",
+  "lines": [
+   "The base model obeys fourteen percent of scam texts.",
+   "An attacker who rewrites each scam sixteen times gets through fifty-two percent of the time.",
+   "And in a three-turn conversation, sixty-eight percent of episodes end with the attacker getting what they asked for.",
+   "Prompt defenses lower the single-shot number, but spotlighting still loses forty-seven percent of those conversations.",
+   "A guard model catches most scams. But it also flags seventy-eight percent of real OTP messages, the very texts the assistant exists to read."
+  ]
+ },
+ {
+  "id": "chain",
+  "lines": [
+   "Our fix runs entirely through Lexsi's chain.",
+   "Curator Kit removes near-duplicate training rows.",
+   "Safe Tune trains a single LoRA adapter, merged into the model.",
+   "Audit Kit compares every model to the base with paired bootstrap tests, and checks every multi-turn conversation with its agent safety evaluator.",
+   "And Circuit Kit looks inside, to find where the hijack happens."
+  ]
+ },
+ {
+  "id": "result",
+  "lines": [
+   "The result. Attack success falls from fourteen percent to zero, on every test split, including the three languages the model never saw.",
+   "Against sixteen rewrites per scam, still zero.",
+   "And it became more useful, not less. Task success rose from forty-eight percent to ninety-nine point five.",
+   "It now warns the user about the scam ninety-eight percent of the time.",
+   "Over-refusal on X S Test went down, and Global M M L U did not drop."
+  ]
+ },
+ {
+  "id": "delegation",
+  "lines": [
+   "After round one, we pushed harder. Three-turn conversations: the scammer texts again, and then the user says, take care of whatever is urgent.",
+   "Our round-one model was still hijacked in twenty percent of them.",
+   "Version two fixed that. But it picked up a habit: with nothing due, it set reminders nobody asked for, in forty-one of sixty-one episodes.",
+   "So version two point one trains on matched pairs. The same inbox, with and without a card bill. Only one message differs.",
+   "Now it is hijacked in zero of a hundred and twenty episodes, and zero of three hundred in a fresh rerun.",
+   "When a bill is due, it sets the reminder with the right date, every time. When nothing is due, it does nothing."
+  ]
+ },
+ {
+  "id": "phone",
+  "lines": [
+   "Then we compressed it to four bits. A two gigabyte file, run by llama dot c p p, the way an offline phone app would ship it.",
+   "Compression makes the base model worse. Attack success rises from fourteen to sixteen point two percent, a significant change. Cohere's own four-bit file shows the same.",
+   "Version two point one does not move. Zero attack success, a hundred percent task success on clean inboxes, and no multi-turn hijacks.",
+   "It writes eleven tokens a second on a twenty seventeen desktop CPU, with no GPU at all."
+  ]
+ },
+ {
+  "id": "replay",
+  "lines": [
+   "Here is the inbox from the start again, now with version two point one, at four bits.",
+   "It calls the delivery guy.",
+   "Then it reads the fake alert, refuses it, and warns the user instead."
+  ]
+ },
+ {
+  "id": "inside",
+  "lines": [
+   "Why does it work? Circuit Kit traces the hijack to a small set of attention heads, mostly in layers fifteen to twenty-four.",
+   "In our fine-tuned model, the scam's total attribution on attention heads drops by seventy-eight percent.",
+   "To test the cause directly, we patched activations between pairs: the same inbox, with and without the scam.",
+   "Swapping just four heads removes ninety-one percent of the scam's push, and copying them in recreates all of it. Four random heads: about three percent.",
+   "With the thirty-two heads we fixed in advance, it holds in the held-out languages too: ninety-six percent, against thirty-one for random heads.",
+   "But deleting those heads is not a fix. Zero out thirty-two of them, and the model stops working. Fine-tuning damps them instead."
+  ]
+ },
+ {
+  "id": "seeds",
+  "lines": [
+   "And it isn't a lucky run. We retrained version two point one with two more seeds.",
+   "Attack success stays at or below zero point one percent, and multi-turn hijacks stay at zero."
+  ]
+ },
+ {
+  "id": "roi",
+  "lines": [
+   "Because it runs on the phone, there is no API bill, and the inbox, OTPs included, never leaves the device.",
+   "For a million users at ten requests a day, a small hosted API model costs about fifty-two thousand dollars a month. On the phone, nothing."
+  ]
+ },
+ {
+  "id": "outro",
+  "lines": [
+   "[Sandesh](/sʌndˈAʃ/). One small LoRA, built with Lexsi's chain, and a scam text no longer runs your phone.",
+   "The model, the four-bit file, and every transcript are open on Hugging Face. The code is on GitHub."
+  ]
+ }
+]
