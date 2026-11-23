@@ -46,6 +46,11 @@ RESULTS = """## Results (SandeshBench test splits; exact checks, no LLM judge)
 | Global-MMLU (en/hi/bn) | 48.0% | 48.7% | – |
 
 4-bit file: 2.00 GiB; 11 tokens/s generation on a 6-core Intel i7-8700 with no GPU (llama-bench, llama.cpp b12318).
+
+Not luck: a second multi-turn run on 300 new episodes (50 per language) gave 0/300 hijacked (95% Wilson interval
+0.0%-1.3%) and 0/153 actions with nothing due. The v2.1 patch retrained with seeds 14 and 15 (everything else fixed):
+attack success 0.1% and 0.1%, hijacked by turn 3 0% and 0%, card reminder with the right date 100% and 100%.
+
 Every number, with confidence intervals and paired significance tests: `results/summary.md` in
 [sandesh-bench-final](https://huggingface.co/datasets/{user}/sandesh-bench-final) and {repo}.
 """
