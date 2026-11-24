@@ -12,7 +12,8 @@ Problem statements: *Adversarial and safety evaluation sets* · *Red-teaming and
 · [its 4-bit GGUF (2.00 GiB, llama.cpp)](https://huggingface.co/ashank-crazy/tiny-aya-fire-sandesh-v2.1-GGUF)
 · [evidence: training pairs, circuit runs, every transcript](https://huggingface.co/datasets/ashank-crazy/sandesh-bench-final)
 · [collection "Sandesh - final round"](https://huggingface.co/collections/ashank-crazy/sandesh-final-round-6b0404b9b89619383a37f0f2)
-· video and slides: `video/` · [feedback for Lexsi](FEEDBACK.md) · [pre-registered plan and pass rules](FINAL_ROUND.md)
+· **[final video (9:11)](deliverables/sandesh-final.mp4)** · **[slides (PDF, 17)](deliverables/sandesh-final-deck.pdf)**
+(rendered by `video/`) · [feedback for Lexsi](FEEDBACK.md) · [pre-registered plan and pass rules](FINAL_ROUND.md)
 
 **Round 1 (unchanged, git tag `round1`).** On Hugging Face: [SandeshBench, curated training sets and every transcript](https://huggingface.co/datasets/ashank-crazy/sandesh-bench)
 · [transcript explorer](https://huggingface.co/spaces/ashank-crazy/sandesh-explorer)
