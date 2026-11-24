@@ -14,6 +14,7 @@ await page.goto('file://' + process.cwd() + '/scenes.html')
 console.log('fonts loaded', await page.eval('window.ready'))
 const total = await page.eval('window.TOTAL')
 const scenes = await page.eval('window.SCENES')
+const overlays = await page.eval('window.OVERLAYS ?? []')
 writeFileSync('out/scenes.json', JSON.stringify({ total, scenes }, null, 1))
 console.log('total', total.toFixed(2), 's')
 
@@ -55,6 +56,26 @@ ff.stdin.end()
 await new Promise((r) => ff.on('close', r))
 await page.close()
 
+// Real video clips (the phone screen recording): masked to rounded corners and laid over the frames at their start time.
+let video = 'out/video-only.mp4'
+if (overlays.length) {
+  const args = ['-y', '-loglevel', 'error', '-i', video], f = []
+  let prev = '[0:v]'
+  overlays.forEach((o, i) => {
+    args.push('-i', o.clip, '-loop', '1', '-framerate', String(FPS), '-t', String(o.dur), '-i', o.mask)
+    f.push(`[${2 * i + 2}:v]format=gray[m${i}]`, `[${2 * i + 1}:v]format=yuva420p[c${i}]`, `[c${i}][m${i}]alphamerge,setpts=PTS-STARTPTS+${o.start.toFixed(4)}/TB[o${i}]`,
+      `${prev}[o${i}]overlay=x=${o.x}:y=${o.y}:eof_action=pass[v${i}]`)
+    prev = `[v${i}]`
+  })
+  args.push('-filter_complex', f.join(';'), '-map', prev, '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', 'out/video-ov.mp4')
+  await new Promise((res, rej) => {
+    const p = spawn('ffmpeg', args, { stdio: 'inherit' })
+    p.on('close', (c) => (c ? rej(new Error('overlay failed')) : res()))
+  })
+  video = 'out/video-ov.mp4'
+  console.log('overlaid', overlays.length, 'clip(s)', ((Date.now() - t0) / 1000).toFixed(0), 's')
+}
+
 // Narration: each scene's wav starts at its audioAt.
 const inputs = [], filters = []
 scenes.forEach((s, i) => {
@@ -68,7 +89,7 @@ await new Promise((res, rej) => {
   p.on('close', (c) => (c ? rej(new Error('audio mix failed')) : res()))
 })
 await new Promise((res, rej) => {
-  const p = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-i', 'out/video-only.mp4', '-i', 'out/narration.wav', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', 'out/sandesh-final.mp4'], { stdio: 'inherit' })
+  const p = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-i', video, '-i', 'out/narration.wav', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', 'out/sandesh-final.mp4'], { stdio: 'inherit' })
   p.on('close', (c) => (c ? rej(new Error('mux failed')) : res()))
 })
 console.log('done out/sandesh-final.mp4', ((Date.now() - t0) / 1000).toFixed(0), 's')

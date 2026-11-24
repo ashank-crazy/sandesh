@@ -72,6 +72,13 @@ table.rs td { padding: 9px 14px; }
 table.rs td .v { font-size: 24px; }
 table.rs td .bar { margin-left: auto; }
 .rec { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--bad); margin-right: 12px; vertical-align: 1px; }
+/* real phone: render.mjs overlays the screen recording exactly on .scr (166, 52, 432x960; see phoneclip.py) */
+.rphone { left: 152px; top: 38px; width: 460px; height: 988px; border-radius: 54px; background: #04060c; border: 1px solid #2a3150; box-shadow: 0 50px 140px rgb(0 0 0 / .6); }
+.rphone .scr { position: absolute; left: 13px; top: 13px; width: 432px; height: 960px; border-radius: 40px; overflow: hidden; background: #000; }
+.rphone .scr img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rpC .sms .txt { -webkit-line-clamp: 4; }
+.rpC .chip { font-size: 19px; padding: 6px 13px; }
+.rpC .tool.goodc { font-size: 21px; line-height: 1.38; padding: 12px 22px; }
 
 /* bars */
 .bar { position: relative; height: 26px; border-radius: 0 6px 6px 0; }
@@ -88,6 +95,7 @@ table.t td:first-child, table.t th:first-child { text-align: left; font-family: 
 <div id="stage"></div>
 <div id="grain"></div>
 <script src="data.js"></script>
+<script src="phone/clip.js"></script>
 <script>
 // ---------- helpers: every frame is a pure function of t ----------
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
@@ -436,6 +444,39 @@ scene('replay', replayHTML(D.demo.v21, 'Recorded run · Sandesh v2.1, 4-bit GGUF
   }, 3.0)
 }
 
+// 9d. The same real-SMS episode on a real phone: an Android screen recording (airplane mode, PocketPal, our Q4_K_M file).
+// render.mjs overlays out/phoneclip.mp4 (phoneclip.py) on .scr; the two posters are the clip's first and last frames.
+// The phone's turn-2 and turn-3 replies are word for word the recorded v2.1 4-bit ones shown here (checked by eye on the recording).
+{
+  const P = window.PHONECLIP, E = D.real, v2 = E.v21.turns[1], v3 = E.v21.turns[2]
+  const scam = E.v21.inbox2.slice(E.v21.inbox.length)[0]
+  const speed = Math.round(P.wait.src_s / (P.wait.to - P.wait.from))
+  scene('realphone', `
+    <div class="tag label lab" style="left:700px"><span class="rec"></span>Screen recording · a real Android phone · airplane mode, no internet</div>
+    <div class="abs rphone"><div class="scr"><img class="pf" src="${P.first}"><img class="pl" src="${P.last}"></div></div>
+    <div class="abs chat rpC" style="left:700px;top:140px;width:1100px;gap:15px">
+      <div class="it k0 row" style="flex-wrap:wrap;gap:10px">
+        <span class="chip">✈ airplane mode · Wi-Fi off</span><span class="chip">PocketPal app · llama.cpp on the phone</span>
+        <span class="chip ok">tiny-aya-fire-sandesh-v2.1-Q4_K_M.gguf · 2.0 GiB</span><span class="chip">temperature 0 · our system prompt</span></div>
+      <div class="it c1" style="align-self:stretch"><div class="hd">INBOX PASTED BY HAND, WHERE AN APP WOULD CALL READ_INBOX · THE NEW SMS</div><div style="margin:0 -16px">${smsHTML(scam, 'scam')}</div></div>
+      <div class="it c2 chip gold" style="align-self:flex-start">⏩ first word after 62 s on the phone · shown ${speed}× faster</div>
+      <div class="it tool goodc c3" style="align-self:stretch;max-width:none"><div class="hd">SANDESH V2.1 · ON THE PHONE · TURN 2</div>${esc(v2.args.text)}<div class="res">✓ word for word the reply in our recorded run</div></div>
+      <div class="it ub c4" style="font-size:24px">Ok, please take care of whatever is urgent</div>
+      <div class="it tool goodc c5" style="align-self:stretch;max-width:none"><div class="hd">TURN 3</div>${esc(v3.args.text)}<div class="res">✓ word for word again · no call, no link, no payment</div></div>
+    </div>
+    <div class="caption" style="left:700px;bottom:22px;width:1100px;transform:none;font-size:16px;white-space:normal;line-height:1.5">Android screen recording, 24 Nov 2026 · 4 min 4 s cut to ${Math.round(P.dur)} s, waits sped up · turns 1-2 not shown: with no app to call read_inbox, it answered before the inbox was pasted</div>`,
+  (t, el) => {
+    const k = { lab: at('realphone', 0) - .3, phone: at('realphone', 0) + .1, k0: at('realphone', 0) + 3.4, c1: at('realphone', 1) + .8,
+      c2: P.wait.from + .2, c3: at('realphone', 3) + .3, c4: at('realphone', 4) + .2, c5: at('realphone', 5) + .3 }
+    show($('.lab', el), prog(t, k.lab, .5), { y: 10 })
+    show($('.rphone', el), prog(t, k.phone, .8), { x: -60, y: 0 })
+    ;['k0', 'c1', 'c2', 'c3', 'c4', 'c5'].forEach((c) => show($('.' + c, el), prog(t, k[c], .5), { y: 24, blur: 6 }))
+    show($('.caption', el), prog(t, k.c1, .6), { y: 0, blur: 0 })
+    $('.pf', el).style.opacity = t < P.at + P.dur ? 1 : 0
+    $('.pl', el).style.opacity = t < P.at + P.dur ? 0 : 1
+  }, 3.0)
+}
+
 // 10. Inside the model
 const CELL = 24, heads = new Map(D.circuit.knock.map((h, i) => [h, i]))
 const gx = (l) => 50 + l * CELL, gy = (h) => 20 + h * CELL
@@ -539,7 +580,7 @@ scene('limits', `
   <div class="abs" style="left:120px;top:260px;width:1680px;font-size:32px;line-height:1.5">
     ${[['Templated SMS, not real inboxes.', 'Near-ceiling task success partly reflects that; real SMS will be messier.'],
        ['Three turns, one scammer.', 'Longer, adaptive campaigns against the fine-tuned model are untested; best-of-16 rewrites is our strongest attacker.'],
-       ['4-bit measured with llama.cpp on a desktop CPU,', 'not inside an Android app on a phone.'],
+       ['4-bit benchmark numbers come from llama.cpp on a desktop.', 'On a real Android phone (PocketPal) we ran one recorded episode, not the benchmark.'],
        ['No LLM-judge cross-check.', 'We dropped the planned judge check; every number is an exact check on the tool call.'],
        ['The circuit was traced on the round-1 model.', 'Patching was run on the base model; v2.1 was not re-traced.']].map(([a, b]) => `<div style="padding:16px 0;border-top:1px solid var(--line)"><b>${a}</b> <span class="soft">${b}</span></div>`).join('')}
   </div>`, () => {}, 0, { deckOnly: true })
@@ -566,10 +607,12 @@ for (const s of timeline) { s.start = offset; offset += s.dur }
 window.TOTAL = offset
 window.SCENES = timeline.map((s) => ({ id: s.id, start: s.start, dur: s.dur, audioAt: s.start + LEAD }))
 window.DECK = scenes.map((s) => s.id)
+// Real video clips render.mjs lays over the finished frames (absolute start time on the timeline).
+window.OVERLAYS = [window.PHONECLIP].filter(Boolean).map((o) => ({ ...o, start: timeline.find((s) => s.id === o.scene).start + o.at }))
 
 const cv = $('#bg'), cx = cv.getContext('2d')
 const tints = { hook: ['#ff6b6b', '#7a2b5a'], thesis: ['#2dd4bf', '#ffb020'], bench: ['#3a5bd9', '#ffb020'], threat: ['#ff6b6b', '#ffa21f'], chain: ['#2dd4bf', '#3a5bd9'],
-  result: ['#2dd4bf', '#ff6b6b'], delegation: ['#a78bfa', '#2dd4bf'], phone: ['#3a5bd9', '#2dd4bf'], replay: ['#2dd4bf', '#3a5bd9'], heldout: ['#ffb020', '#2dd4bf'], realsms: ['#ff6b6b', '#2dd4bf'], inside: ['#ffb020', '#3a5bd9'],
+  result: ['#2dd4bf', '#ff6b6b'], delegation: ['#a78bfa', '#2dd4bf'], phone: ['#3a5bd9', '#2dd4bf'], replay: ['#2dd4bf', '#3a5bd9'], heldout: ['#ffb020', '#2dd4bf'], realsms: ['#ff6b6b', '#2dd4bf'], realphone: ['#2dd4bf', '#3a5bd9'], inside: ['#ffb020', '#3a5bd9'],
   seeds: ['#2dd4bf', '#a78bfa'], roi: ['#2dd4bf', '#ffb020'], limits: ['#737a92', '#3a5bd9'], outro: ['#2dd4bf', '#ffb020'] }
 function drawBg(t, id, k) {
   cx.fillStyle = '#0b0f1d'; cx.fillRect(0, 0, 960, 540)

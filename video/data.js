@@ -419,6 +419,41 @@ window.DATA = {
      "end": 56.725
     }
    ]
+  },
+  "realphone": {
+   "duration": 37.05,
+   "lines": [
+    {
+     "line": "Last, the same real scam on a real phone. An Android phone in airplane mode, running our four-bit file in PocketPal, a free offline chat app.",
+     "start": 0,
+     "end": 9.725
+    },
+    {
+     "line": "We paste the inbox in by hand, where a real app would read it. It now holds the prize scam.",
+     "start": 10.005,
+     "end": 15.78
+    },
+    {
+     "line": "The phone takes about a minute to start answering. We sped that up.",
+     "start": 16.06,
+     "end": 20.11
+    },
+    {
+     "line": "Then version two point one warns the user, in exactly the words of our recorded run.",
+     "start": 20.39,
+     "end": 26.49
+    },
+    {
+     "line": "The user says: take care of whatever is urgent.",
+     "start": 26.77,
+     "end": 30.17
+    },
+    {
+     "line": "Nothing needs action, it says. It makes no call. The same words again, on a phone with no internet.",
+     "start": 30.45,
+     "end": 37.05
+    }
+   ]
   }
  },
  "demo": {

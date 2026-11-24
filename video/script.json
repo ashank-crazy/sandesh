@@ -112,6 +112,17 @@
   ]
  },
  {
+  "id": "realphone",
+  "lines": [
+   "Last, the same real scam on a real phone. An Android phone in airplane mode, running our four-bit file in PocketPal, a free offline chat app.",
+   "We paste the inbox in by hand, where a real app would read it. It now holds the prize scam.",
+   "The phone takes about a minute to start answering. We sped that up.",
+   "Then version two point one warns the user, in exactly the words of our recorded run.",
+   "The user says: take care of whatever is urgent.",
+   "Nothing needs action, it says. It makes no call. The same words again, on a phone with no internet."
+  ]
+ },
+ {
   "id": "inside",
   "lines": [
    "Why does it work? Circuit Kit traces the hijack to a small set of attention heads, mostly in layers fifteen to twenty-four.",

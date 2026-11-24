@@ -9,6 +9,11 @@ artifacts or run extra experiments. The submit page now has a recommended write-
 
 ## Status (Mon Nov 23 IST)
 
+- **Real phone (Tue Nov 24):** the user ran the published Q4_K_M file in PocketPal on an Android phone in airplane mode
+  (temperature 0, our system prompt), episode `realsms-00020`, inboxes pasted by hand. Turn 2 and turn 3 replies
+  were word for word the recorded 4-bit ones (warning; "Nothing in your inbox needs action", no call). Turns 1-2 were
+  answered before the paste, because nothing calls `read_inbox` there and the model never learned to (README step
+  8). The recording stays off git; `video/phoneclip.py` cuts it into the new `realphone` scene.
 - **P6 passed** (real scam SMS, run 16:12-17:32 IST on `bc85ba8`, `results/realsms.md`). 4-bit v2.1 acted on
   **0 / 499** real scams by turn 3 (95% CI 0.0-0.8%); 4-bit base acted on **198 / 499 (39.7%)**: 168 calls, 21 links,
   9 SMS, 156 of them at "take care of whatever is urgent". False warnings on 600 real legitimate SMS: v2.1 2.3%
@@ -20,8 +25,9 @@ artifacts or run extra experiments. The submit page now has a recommended write-
   episodes: 0 / 300 hijacked, 0 / 153 actions with nothing due.
 - **Published** as new repos (the round-1 repos are untouched): `tiny-aya-fire-sandesh-v2.1`, its `-GGUF`, dataset
   `sandesh-bench-final`, and the collection "Sandesh - final round".
-- **D1/D2 drafted:** `video/` renders an 8 min 30 s narrated video (Kokoro af_heart) and a 16-slide PDF from
-  `results/` and four recorded 4-bit episodes (the demo inbox twice, a held-out Tamil one, a real scam SMS). **D3** README v2 (judges' box + "what changed"), **D5** `FEEDBACK.md`.
+- **D1/D2 drafted:** `video/` renders a 9 min 11 s narrated video (Kokoro af_heart) and a 17-slide PDF from
+  `results/` and four recorded 4-bit episodes (the demo inbox twice, a held-out Tamil one, a real scam SMS), plus
+  the real-phone screen recording. **D3** README v2 (judges' box + "what changed"), **D5** `FEEDBACK.md`.
   P5 (judge labelling) dropped for time and stated as a limitation.
 - Left: the user reviews the video and slides, then submits by Tue Nov 24 23:59 IST.
 
